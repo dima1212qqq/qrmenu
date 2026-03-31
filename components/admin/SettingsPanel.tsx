@@ -76,7 +76,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       setTestMessage("Сначала заполните токен и chat ID");
       return;
     }
-    
+
     setTesting(true);
     setTestMessage("");
     try {
@@ -87,7 +87,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           message: "🔔 Тестовое сообщение!\n\nЕсли вы видите это, значит Telegram уведомления настроены правильно.",
         }),
       });
-      
+
       if (res.ok) {
         setTestMessage("✅ Сообщение отправлено!");
       } else {
@@ -138,14 +138,13 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           <div className="border-t border-gray-200 pt-6">
             <h3 className="text-sm font-medium text-gray-700 mb-3">📱 Telegram уведомления</h3>
             <p className="text-xs text-gray-500 mb-4">
-              Настройте Telegram Bot для получения уведомлений о вызовах официанта на любом устройстве. Эти настройки будут использоваться по умолчанию для всех меню.
+              Настройте Telegram Bot для получения уведомлений о вызовах официанта на любом устройстве.
+              Эти настройки будут использоваться по умолчанию для всех меню.
             </p>
-            
+
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  Bot Token
-                </label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Bot Token</label>
                 <Input
                   placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
                   value={settings.telegramBotToken || ""}
@@ -157,9 +156,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  Chat ID
-                </label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Chat ID</label>
                 <Input
                   placeholder="123456789"
                   value={settings.telegramChatId || ""}
@@ -170,8 +167,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 </p>
               </div>
 
-              <Button 
-                variant="secondary" 
+              <Button
+                variant="secondary"
                 onClick={handleTest}
                 disabled={testing || !settings.telegramBotToken || !settings.telegramChatId}
               >

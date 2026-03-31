@@ -74,7 +74,11 @@ export async function POST(request: NextRequest) {
     const telegramChatId = menuSettings.telegramChatId || organizationSettings.telegramChatId;
 
     if (telegramToken && telegramChatId) {
-      const message = `рџ”” <b>Р’С‹Р·РѕРІ РѕС„РёС†РёР°РЅС‚Р°!</b>\nрџ“‹ РњРµРЅСЋ: ${menu.name}\nрџЄ‘ РЎС‚РѕР»: ${tableNumber || "РЅРµ СѓРєР°Р·Р°РЅ"}\nвЏ° ${new Date().toLocaleTimeString("ru-RU")}`;
+      const message =
+        `🔔 <b>Вызов официанта!</b>\n` +
+        `📋 Меню: ${menu.name}\n` +
+        `🪑 Стол: ${tableNumber || "не указан"}\n` +
+        `⏰ ${new Date().toLocaleTimeString("ru-RU")}`;
       await sendTelegramNotification(message, telegramToken, telegramChatId);
     }
 

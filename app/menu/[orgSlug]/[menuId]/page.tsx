@@ -214,7 +214,7 @@ export default function MenuPage() {
         </div>
       )}
 
-      <main className="max-w-3xl mx-auto px-4 py-6">
+      <main className="max-w-3xl mx-auto px-4 py-6 pb-32 sm:pb-36">
         {menu.categories.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500">В этом меню пока нет категорий</p>
@@ -311,7 +311,10 @@ export default function MenuPage() {
         )}
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4">
+      <div
+        className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
+      >
         <div className="max-w-3xl mx-auto">
           <Button
             onClick={handleCallWaiter}

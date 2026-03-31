@@ -1,0 +1,262 @@
+"use client";
+
+import React, { useState, useMemo } from "react";
+import { useStore, Dish, Category } from "@/lib/store-api";
+import { formatPrice } from "@/lib/utils";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Input";
+import { Modal } from "@/components/ui/Modal";
+
+interface DishCardProps {
+  dish: Dish;
+  menuId: string;
+}
+
+export function DishCard({ dish, menuId }: DishCardProps) {
+  const { state, dispatch } = useStore();
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editName, setEditName] = useState(dish.name);
+  const [editDesc, setEditDesc] = useState(dish.description || "");
+  const [editPrice, setEditPrice] = useState(dish.price.toString());
+  const [editImage, setEditImage] = useState(dish.image || "");
+  const [editCategoryIds, setEditCategoryIds] = useState<string[]>(
+    state.dishCategories.filter((dc) => dc.dish_id === dish.id).map((dc) => dc.category_id)
+  );
+  const [saving, setSaving] = useState(false);
+
+  const categories = useMemo(
+    () => state.categories.filter((c) => c.menu_id === menuId),
+    [state.categories, menuId]
+  );
+
+  const dishCategoryIds = useMemo(
+    () => state.dishCategories.filter((dc) => dc.dish_id === dish.id).map((dc) => dc.category_id),
+    [state.dishCategories, dish.id]
+  );
+
+  const handleSave = async () => {
+    if (!editName.trim() || !editPrice) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/dishes/${dish.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName.trim(),
+          description: editDesc.trim() || undefined,
+          price: parseFloat(editPrice) || 0,
+          image: editImage.trim() || undefined,
+          categoryIds: editCategoryIds,
+        }),
+      });
+      if (res.ok) {
+        dispatch({
+          type: "UPDATE_DISH",
+          payload: {
+            ...dish,
+            name: editName.trim(),
+            description: editDesc.trim() || undefined,
+            price: parseFloat(editPrice) || 0,
+            image: editImage.trim() || undefined,
+          },
+        });
+
+        categories.forEach((cat) => {
+          const hadDish = dishCategoryIds.includes(cat.id);
+          const hasDish = editCategoryIds.includes(cat.id);
+          
+          if (hadDish && !hasDish) {
+            dispatch({
+              type: "REMOVE_DISH_FROM_CATEGORY",
+              payload: { dishId: dish.id, categoryId: cat.id },
+            });
+          } else if (!hadDish && hasDish) {
+            dispatch({
+              type: "ADD_DISH_TO_CATEGORY",
+              payload: { dishId: dish.id, categoryId: cat.id },
+            });
+          }
+        });
+
+        setShowEditModal(false);
+      }
+    } catch (error) {
+      console.error("Failed to update dish:", error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await fetch(`/api/dishes/${dish.id}`, { method: "DELETE" });
+      dispatch({ type: "DELETE_DISH", payload: { menuId, dishId: dish.id } });
+      setShowDeleteConfirm(false);
+    } catch (error) {
+      console.error("Failed to delete dish:", error);
+    }
+  };
+
+  const toggleCategory = (catId: string) => {
+    setEditCategoryIds((prev) =>
+      prev.includes(catId) ? prev.filter((id) => id !== catId) : [...prev, catId]
+    );
+  };
+
+  return (
+    <>
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+        <div className="flex w-full">
+          {dish.image && (
+            <div className="w-16 h-16 sm:w-24 sm:h-24 flex-shrink-0">
+              <img
+                src={dish.image}
+                alt={dish.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
+            </div>
+          )}
+          <div className={`p-3 sm:p-4 min-w-0 ${dish.image ? "" : "flex-1"}`}>
+            <div className="flex justify-between items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <h3 className="font-semibold text-gray-900 truncate">{dish.name}</h3>
+                {dish.description && (
+                  <p className="text-sm text-gray-500 mt-1 line-clamp-2">{dish.description}</p>
+                )}
+              </div>
+              <p className="text-base sm:text-lg font-semibold text-primary flex-shrink-0 ml-2">
+                {formatPrice(dish.price)}
+              </p>
+            </div>
+            {categories.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {dishCategoryIds
+                  .map((id) => categories.find((c) => c.id === id))
+                  .filter(Boolean)
+                  .map((cat) => (
+                    <span
+                      key={cat!.id}
+                      className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full"
+                    >
+                      {cat!.name}
+                    </span>
+                  ))}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-col gap-1 p-2 border-l border-gray-100">
+            <Button variant="ghost" size="sm" onClick={() => setShowEditModal(true)}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setShowDeleteConfirm(true)}>
+              <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <Modal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditName(dish.name);
+          setEditDesc(dish.description || "");
+          setEditPrice(dish.price.toString());
+          setEditImage(dish.image || "");
+          setEditCategoryIds(dishCategoryIds);
+        }}
+        title="Редактировать блюдо"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowEditModal(false)}>
+              Отмена
+            </Button>
+            <Button onClick={handleSave} disabled={!editName.trim() || !editPrice || saving}>
+              {saving ? "Сохранение..." : "Сохранить"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Название"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            autoFocus
+          />
+          <Textarea
+            label="Описание"
+            value={editDesc}
+            onChange={(e) => setEditDesc(e.target.value)}
+            rows={2}
+          />
+          <Input
+            label="Цена"
+            type="number"
+            value={editPrice}
+            onChange={(e) => setEditPrice(e.target.value)}
+            min="0"
+          />
+          <Input
+            label="URL изображения"
+            value={editImage}
+            onChange={(e) => setEditImage(e.target.value)}
+            placeholder="https://example.com/image.jpg"
+          />
+          {categories.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Категории
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {categories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => toggleCategory(cat.id)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                      editCategoryIds.includes(cat.id)
+                        ? "bg-primary text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        title="Удалить блюдо?"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowDeleteConfirm(false)}>
+              Отмена
+            </Button>
+            <Button variant="danger" onClick={handleDelete}>
+              Удалить
+            </Button>
+          </>
+        }
+      >
+        <p className="text-gray-600">
+          Блюдо &quot;{dish.name}&quot; будет удалено навсегда.
+        </p>
+      </Modal>
+    </>
+  );
+}

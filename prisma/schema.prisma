@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  owner
+  waiter
+}
+
+enum WaiterCallStatus {
+  pending
+  completed
+}
+
+model Organization {
+  id               String @id @default(uuid())
+  name             String
+  slug             String @unique
+  createdAt        BigInt @map("created_at")
+  telegramBotToken String? @map("telegram_bot_token")
+  telegramChatId   String? @map("telegram_chat_id")
+  soundEnabled     Boolean @default(true) @map("sound_enabled")
+  users            User[]
+  menus            Menu[]
+
+  @@map("organizations")
+}
+
+model User {
+  id             String   @id @default(uuid())
+  email          String   @unique
+  password       String
+  name           String
+  role           UserRole
+  organizationId String   @map("organization_id")
+  createdAt      BigInt   @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("users")
+}
+
+model Menu {
+  id               String @id @default(uuid())
+  organizationId   String @map("organization_id")
+  name             String
+  description      String?
+  logo             String?
+  createdAt        BigInt @map("created_at")
+  telegramBotToken String? @map("telegram_bot_token")
+  telegramChatId   String? @map("telegram_chat_id")
+  soundEnabled     Boolean @default(true) @map("sound_enabled")
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  categories       Category[]
+  dishes           Dish[]
+  waiterCalls      WaiterCall[]
+
+  @@index([organizationId])
+  @@map("menus")
+}
+
+model Category {
+  id          String @id @default(uuid())
+  menuId      String @map("menu_id")
+  name        String
+  description String?
+  sortOrder   Int    @map("sort_order")
+  menu        Menu   @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  dishLinks   DishCategory[]
+
+  @@index([menuId])
+  @@map("categories")
+}
+
+model Dish {
+  id          String @id @default(uuid())
+  menuId      String @map("menu_id")
+  name        String
+  description String?
+  price       Float
+  image       String?
+  menu        Menu @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  categories  DishCategory[]
+
+  @@index([menuId])
+  @@map("dishes")
+}
+
+model DishCategory {
+  dishId     String   @map("dish_id")
+  categoryId String   @map("category_id")
+  dish       Dish     @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([dishId, categoryId])
+  @@index([categoryId])
+  @@map("dish_categories")
+}
+
+model WaiterCall {
+  id          String           @id @default(uuid())
+  menuId      String           @map("menu_id")
+  tableNumber String?          @map("table_number")
+  createdAt   BigInt           @map("created_at")
+  status      WaiterCallStatus
+  menu        Menu             @relation(fields: [menuId], references: [id], onDelete: Cascade)
+
+  @@index([menuId])
+  @@map("waiter_calls")
+}

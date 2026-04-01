@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     }
 
     const user = session.user as any;
-    const { menuId, name, description, price, image, categoryIds } = await request.json();
+    const { menuId, name, description, price, image, weight, calories, allergens, tag_id, categoryIds } = await request.json();
 
     if (!menuId || !name || price === undefined) {
       return NextResponse.json({ error: "menuId, name and price are required" }, { status: 400 });
@@ -68,6 +68,10 @@ export async function POST(request: NextRequest) {
       description: description || null,
       price: parseFloat(price) || 0,
       image: image || null,
+      weight: weight || null,
+      calories: calories ? parseInt(calories) : null,
+      allergens: allergens || null,
+      tag_id: tag_id || null,
     });
 
     if (categoryIds && Array.isArray(categoryIds)) {

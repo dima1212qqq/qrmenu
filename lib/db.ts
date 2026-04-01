@@ -7,6 +7,7 @@ import {
   type DishCategory as PrismaDishCategory,
   type Menu as PrismaMenu,
   type Organization as PrismaOrganization,
+  type Tag as PrismaTag,
   type User as PrismaUser,
   type WaiterCall as PrismaWaiterCall,
 } from "@prisma/client";
@@ -18,6 +19,7 @@ import type {
   Menu as AppMenu,
   MenuSettings as AppMenuSettings,
   Organization as AppOrganization,
+  Tag as AppTag,
   User as AppUser,
   WaiterCall as AppWaiterCall,
 } from "./types";
@@ -64,6 +66,7 @@ export interface OrganizationSettings {
   telegramBotToken: string | null;
   telegramChatId: string | null;
   soundEnabled: boolean;
+  showWaiterButton: boolean;
 }
 
 export type MenuSettings = AppMenuSettings;
@@ -120,6 +123,10 @@ interface DishCreateInput {
   description?: string | null;
   price: number;
   image?: string | null;
+  weight?: string | null;
+  calories?: number | null;
+  allergens?: string | null;
+  tag_id?: string | null;
 }
 
 interface WaiterCallCreateInput {
@@ -129,6 +136,18 @@ interface WaiterCallCreateInput {
   created_at?: number;
   status: string;
 }
+
+interface TagCreateInput {
+  id?: string;
+  name: string;
+  emoji?: string;
+  organization_id: string;
+}
+
+type TagUpdateInput = Partial<{
+  name: string;
+  emoji: string;
+}>;
 
 type MenuUpdateInput = Partial<{
   name: string;
@@ -148,6 +167,10 @@ type DishUpdateInput = Partial<{
   description: string | null;
   price: number;
   image: string | null;
+  weight: string | null;
+  calories: number | null;
+  allergens: string | null;
+  tag_id: string | null;
 }>;
 
 type WaiterCallUpdateInput = Partial<{
@@ -179,11 +202,27 @@ function mapSettings(source: {
   telegramBotToken: string | null;
   telegramChatId: string | null;
   soundEnabled: boolean;
+  showWaiterButton?: boolean;
 }): OrganizationSettings {
   return {
     telegramBotToken: source.telegramBotToken,
     telegramChatId: source.telegramChatId,
     soundEnabled: source.soundEnabled,
+    showWaiterButton: source.showWaiterButton ?? true,
+  };
+}
+
+function mapMenuSettings(source: {
+  telegramBotToken: string | null;
+  telegramChatId: string | null;
+  soundEnabled: boolean;
+  showWaiterButton?: boolean;
+}): MenuSettings {
+  return {
+    telegramBotToken: source.telegramBotToken,
+    telegramChatId: source.telegramChatId,
+    soundEnabled: source.soundEnabled,
+    showWaiterButton: source.showWaiterButton ?? true,
   };
 }
 
@@ -217,7 +256,7 @@ function toMenu(record: PrismaMenu): AppMenu {
     description: record.description,
     logo: record.logo,
     created_at: toNumber(record.createdAt),
-    settings: mapSettings(record),
+    settings: mapMenuSettings(record),
   };
 }
 
@@ -239,6 +278,10 @@ function toDish(record: PrismaDish): AppDish {
     description: record.description,
     price: record.price,
     image: record.image,
+    weight: record.weight,
+    calories: record.calories,
+    allergens: record.allergens,
+    tag_id: record.tagId,
   };
 }
 
@@ -256,6 +299,14 @@ function toWaiterCall(record: PrismaWaiterCall): AppWaiterCall {
     table_number: record.tableNumber,
     created_at: toNumber(record.createdAt),
     status: toWaiterStatus(record.status),
+  };
+}
+
+function toTag(record: PrismaTag): AppTag {
+  return {
+    id: record.id,
+    name: record.name,
+    emoji: record.emoji,
   };
 }
 
@@ -335,6 +386,7 @@ export async function getOrganizationSettings(orgId: string): Promise<Organizati
     telegramBotToken: null,
     telegramChatId: null,
     soundEnabled: DEFAULT_SOUND_ENABLED,
+    showWaiterButton: true,
   };
 }
 
@@ -348,6 +400,7 @@ export async function updateOrganizationSettings(
       ...(settings.telegramBotToken !== undefined ? { telegramBotToken: settings.telegramBotToken } : {}),
       ...(settings.telegramChatId !== undefined ? { telegramChatId: settings.telegramChatId } : {}),
       ...(settings.soundEnabled !== undefined ? { soundEnabled: settings.soundEnabled } : {}),
+      ...(settings.showWaiterButton !== undefined ? { showWaiterButton: settings.showWaiterButton } : {}),
     },
   });
 
@@ -602,6 +655,10 @@ export async function createDish(input: DishCreateInput): Promise<AppDish> {
       description: input.description ?? null,
       price: input.price,
       image: input.image ?? null,
+      weight: input.weight ?? null,
+      calories: input.calories ?? null,
+      allergens: input.allergens ?? null,
+      tagId: input.tag_id ?? null,
     },
   });
 
@@ -621,6 +678,10 @@ export async function updateDish(id: string, updates: DishUpdateInput): Promise<
       ...(updates.description !== undefined ? { description: updates.description } : {}),
       ...(updates.price !== undefined ? { price: updates.price } : {}),
       ...(updates.image !== undefined ? { image: updates.image } : {}),
+      ...(updates.weight !== undefined ? { weight: updates.weight } : {}),
+      ...(updates.calories !== undefined ? { calories: updates.calories } : {}),
+      ...(updates.allergens !== undefined ? { allergens: updates.allergens } : {}),
+      ...(updates.tag_id !== undefined ? { tagId: updates.tag_id } : {}),
     },
   });
 
@@ -743,10 +804,11 @@ export async function deleteWaiterCall(id: string): Promise<boolean> {
 
 export async function getMenuSettings(menuId: string): Promise<MenuSettings> {
   const menu = await prisma.menu.findUnique({ where: { id: menuId } });
-  return menu ? mapSettings(menu) : {
+  return menu ? mapMenuSettings(menu) : {
     telegramBotToken: null,
     telegramChatId: null,
     soundEnabled: DEFAULT_SOUND_ENABLED,
+    showWaiterButton: true,
   };
 }
 
@@ -760,10 +822,78 @@ export async function updateMenuSettings(
       ...(settings.telegramBotToken !== undefined ? { telegramBotToken: settings.telegramBotToken } : {}),
       ...(settings.telegramChatId !== undefined ? { telegramChatId: settings.telegramChatId } : {}),
       ...(settings.soundEnabled !== undefined ? { soundEnabled: settings.soundEnabled } : {}),
+      ...(settings.showWaiterButton !== undefined ? { showWaiterButton: settings.showWaiterButton } : {}),
     },
   });
 
-  return mapSettings(menu);
+  return mapMenuSettings(menu);
+}
+
+export async function getTags(organizationId: string): Promise<AppTag[]> {
+  const tags = await prisma.tag.findMany({
+    where: {
+      organizationId,
+    },
+    orderBy: { name: "asc" },
+  });
+
+  return tags.map(toTag);
+}
+
+export async function getAllTags(): Promise<AppTag[]> {
+  const tags = await prisma.tag.findMany({
+    orderBy: { name: "asc" },
+  });
+
+  return tags.map(toTag);
+}
+
+export async function getTag(id: string): Promise<AppTag | undefined> {
+  const tag = await prisma.tag.findUnique({ where: { id } });
+  return tag ? toTag(tag) : undefined;
+}
+
+export async function createTag(input: TagCreateInput): Promise<AppTag> {
+  const tag = await prisma.tag.create({
+    data: {
+      id: input.id,
+      name: input.name,
+      emoji: input.emoji || "⭐",
+      organizationId: input.organization_id,
+    },
+  });
+
+  return toTag(tag);
+}
+
+export async function updateTag(id: string, updates: TagUpdateInput): Promise<AppTag | undefined> {
+  const existing = await prisma.tag.findUnique({ where: { id } });
+  if (!existing) {
+    return undefined;
+  }
+
+  const tag = await prisma.tag.update({
+    where: { id },
+    data: {
+      ...(updates.name !== undefined ? { name: updates.name } : {}),
+      ...(updates.emoji !== undefined ? { emoji: updates.emoji } : {}),
+    },
+  });
+
+  return toTag(tag);
+}
+
+export async function deleteTag(id: string): Promise<boolean> {
+  const existing = await prisma.tag.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  if (!existing) {
+    return false;
+  }
+
+  await prisma.tag.delete({ where: { id } });
+  return true;
 }
 
 export async function sendTelegramNotification(

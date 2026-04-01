@@ -26,13 +26,17 @@ export async function PUT(
       return NextResponse.json({ error: "Dish not found" }, { status: 404 });
     }
 
-    const { name, description, price, image, categoryIds } = await request.json();
+    const { name, description, price, image, weight, calories, allergens, tag_id, categoryIds } = await request.json();
 
-    const updates: { name?: string; description?: string | null; price?: number; image?: string | null } = {};
+    const updates: { name?: string; description?: string | null; price?: number; image?: string | null; weight?: string | null; calories?: number | null; allergens?: string | null; tag_id?: string | null } = {};
     if (name !== undefined) updates.name = name;
     if (description !== undefined) updates.description = description || null;
     if (price !== undefined) updates.price = parseFloat(price) || 0;
     if (image !== undefined) updates.image = image || null;
+    if (weight !== undefined) updates.weight = (weight === '' || weight === null) ? null : weight;
+    if (calories !== undefined) updates.calories = calories === '' || calories === null ? null : (calories ? parseInt(calories) : null);
+    if (allergens !== undefined) updates.allergens = allergens || null;
+    if (tag_id !== undefined) updates.tag_id = tag_id || null;
 
     const updatedDish = await updateDish(params.id, updates);
 

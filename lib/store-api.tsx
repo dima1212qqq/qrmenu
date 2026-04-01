@@ -1,13 +1,14 @@
 "use client";
 
 import { createContext, useContext, useReducer, useEffect, ReactNode, useCallback } from "react";
-import { Menu, Category, Dish, DishCategory, User, Organization, AppState } from "./types";
+import { Menu, Category, Dish, DishCategory, User, Organization, Tag, AppState } from "./types";
 
 const initialState: AppState = {
   menus: [],
   dishes: [],
   categories: [],
   dishCategories: [],
+  tags: [],
   activeMenuId: null,
   activeCategoryId: null,
   loading: true,
@@ -23,6 +24,7 @@ type Action =
   | { type: "SET_DISHES"; payload: Dish[] }
   | { type: "SET_CATEGORIES"; payload: Category[] }
   | { type: "SET_DISH_CATEGORIES"; payload: DishCategory[] }
+  | { type: "SET_TAGS"; payload: Tag[] }
   | { type: "SET_FULL_MENU"; payload: { menu: Menu; categories: Category[]; dishes: Dish[]; dishCategories: DishCategory[] } }
   | { type: "CREATE_MENU"; payload: Menu }
   | { type: "UPDATE_MENU"; payload: Menu }
@@ -40,7 +42,10 @@ type Action =
   | { type: "REMOVE_DISH_FROM_CATEGORY"; payload: { dishId: string; categoryId: string } }
   | { type: "SET_USERS"; payload: User[] }
   | { type: "ADD_USER"; payload: User }
-  | { type: "DELETE_USER"; payload: string };
+  | { type: "DELETE_USER"; payload: string }
+  | { type: "CREATE_TAG"; payload: Tag }
+  | { type: "UPDATE_TAG"; payload: Tag }
+  | { type: "DELETE_TAG"; payload: string };
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -168,6 +173,21 @@ function reducer(state: AppState, action: Action): AppState {
     case "DELETE_USER":
       return { ...state, users: state.users.filter((u) => u.id !== action.payload) };
 
+    case "SET_TAGS":
+      return { ...state, tags: action.payload };
+
+    case "CREATE_TAG":
+      return { ...state, tags: [...state.tags, action.payload] };
+
+    case "UPDATE_TAG":
+      return {
+        ...state,
+        tags: state.tags.map((t) => (t.id === action.payload.id ? action.payload : t)),
+      };
+
+    case "DELETE_TAG":
+      return { ...state, tags: state.tags.filter((t) => t.id !== action.payload) };
+
     default:
       return state;
   }
@@ -189,12 +209,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try {
       dispatch({ type: "SET_LOADING", payload: true });
 
-      const [orgRes, menusRes, categoriesRes, dishesRes, dishCatsRes] = await Promise.all([
+      const [orgRes, menusRes, categoriesRes, dishesRes, dishCatsRes, tagsRes] = await Promise.all([
         fetch("/api/organizations/me"),
         fetch("/api/menus"),
         fetch("/api/categories"),
         fetch("/api/dishes"),
         fetch("/api/dish-categories"),
+        fetch("/api/tags"),
       ]);
 
       if (orgRes.ok) {
@@ -220,6 +241,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (dishCatsRes.ok) {
         const dishCategories = await dishCatsRes.json();
         dispatch({ type: "SET_DISH_CATEGORIES", payload: dishCategories });
+      }
+
+      if (tagsRes.ok) {
+        const tags = await tagsRes.json();
+        dispatch({ type: "SET_TAGS", payload: tags });
       }
     } catch (error) {
       console.error("Failed to fetch data:", error);
@@ -298,4 +324,4 @@ export function useCategoriesForDish(dishId: string): Category[] {
   return state.categories.filter((c) => categoryIds.includes(c.id));
 }
 
-export type { Menu, Category, Dish, User, Organization, DishCategory };
+export type { Menu, Category, Dish, User, Organization, DishCategory, Tag };

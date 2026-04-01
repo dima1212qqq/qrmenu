@@ -34,6 +34,7 @@ export async function PATCH(request: NextRequest) {
       telegramBotToken: updates.telegramBotToken || null,
       telegramChatId: updates.telegramChatId || null,
       soundEnabled: updates.soundEnabled ?? true,
+      showWaiterButton: updates.showWaiterButton ?? true,
     });
 
     return NextResponse.json(settings);

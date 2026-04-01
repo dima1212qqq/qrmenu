@@ -25,8 +25,10 @@ model Organization {
   telegramBotToken String? @map("telegram_bot_token")
   telegramChatId   String? @map("telegram_chat_id")
   soundEnabled     Boolean @default(true) @map("sound_enabled")
+  showWaiterButton Boolean @default(true) @map("show_waiter_button")
   users            User[]
   menus            Menu[]
+  tags             Tag[]
 
   @@map("organizations")
 }
@@ -55,6 +57,7 @@ model Menu {
   telegramBotToken String? @map("telegram_bot_token")
   telegramChatId   String? @map("telegram_chat_id")
   soundEnabled     Boolean @default(true) @map("sound_enabled")
+  showWaiterButton Boolean @default(true) @map("show_waiter_button")
   organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   categories       Category[]
   dishes           Dish[]
@@ -84,11 +87,29 @@ model Dish {
   description String?
   price       Float
   image       String?
+  weight      String?
+  calories    Int?
+  allergens   String?
+  tagId       String?  @map("tag_id")
   menu        Menu @relation(fields: [menuId], references: [id], onDelete: Cascade)
   categories  DishCategory[]
+  tag         Tag?   @relation(fields: [tagId], references: [id], onDelete: SetNull)
 
   @@index([menuId])
+  @@index([tagId])
   @@map("dishes")
+}
+
+model Tag {
+  id             String @id @default(uuid())
+  name           String
+  emoji          String @default("⭐")
+  organizationId String @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  dishes         Dish[]
+
+  @@index([organizationId])
+  @@map("tags")
 }
 
 model DishCategory {

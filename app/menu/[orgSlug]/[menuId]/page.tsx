@@ -19,6 +19,16 @@ interface Dish {
   description: string | null;
   price: number;
   image: string | null;
+  weight: string | null;
+  calories: number | null;
+  allergens: string | null;
+  tag_id: string | null;
+}
+
+interface Tag {
+  id: string;
+  name: string;
+  emoji: string;
 }
 
 interface DishCategory {
@@ -39,10 +49,12 @@ interface MenuData {
     logo: string | null;
     settings: {
       soundEnabled: boolean;
+      showWaiterButton?: boolean;
     };
     categories: Category[];
     dishes: Dish[];
     dishCategories: DishCategory[];
+    tags: Tag[];
   };
 }
 
@@ -52,6 +64,7 @@ export default function MenuPage() {
   const orgSlug = params.orgSlug as string;
   const menuId = params.menuId as string;
   const tableNumber = searchParams.get("table");
+  const isSharedLink = searchParams.get("share") === "true";
 
   const [data, setData] = useState<MenuData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,6 +73,8 @@ export default function MenuPage() {
   const [calling, setCalling] = useState(false);
   const [called, setCalled] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [showWaiterButton, setShowWaiterButton] = useState(false);
+  const [selectedDish, setSelectedDish] = useState<Dish | null>(null);
 
   useEffect(() => {
     async function fetchMenu() {
@@ -71,6 +86,7 @@ export default function MenuPage() {
         const menuData = await res.json();
         setData(menuData);
         setSoundEnabled(menuData.menu.settings.soundEnabled ?? true);
+        setShowWaiterButton(isSharedLink ? false : (menuData.menu.settings.showWaiterButton ?? true));
       } catch (err) {
         setError("Меню не найдено");
       } finally {
@@ -154,6 +170,11 @@ export default function MenuPage() {
       .map((dc) => dc.category_id);
   };
 
+  const getDishTag = (tagId: string | null): Tag | undefined => {
+    if (!tagId) return undefined;
+    return menu.tags.find((t) => t.id === tagId);
+  };
+
   const filteredDishes = activeCategory
     ? menu.dishes.filter((dish) => getDishCategories(dish.id).includes(activeCategory))
     : menu.dishes;
@@ -234,33 +255,49 @@ export default function MenuPage() {
                         {category.name}
                       </h2>
                       <div className="space-y-3">
-                        {filteredDishes.map((dish) => (
-                          <div
-                            key={dish.id}
-                            className="bg-white rounded-xl border border-gray-200 p-4 flex gap-4"
-                          >
-                            {dish.image && (
-                              <img
-                                src={dish.image}
-                                alt={dish.name}
-                                className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
-                              />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-2">
-                                <h3 className="font-medium text-gray-900">{dish.name}</h3>
-                                <span className="text-primary font-semibold whitespace-nowrap">
-                                  {formatPrice(dish.price)} ₽
-                                </span>
-                              </div>
-                              {dish.description && (
-                                <p className="text-sm text-gray-500 mt-1 line-clamp-2">
-                                  {dish.description}
-                                </p>
+                        {filteredDishes.map((dish) => {
+                          const tag = getDishTag(dish.tag_id);
+                          return (
+                            <div
+                              key={dish.id}
+                              className="bg-white rounded-xl border border-gray-200 p-4 flex gap-4 cursor-pointer hover:shadow-md transition-shadow"
+                              onClick={() => setSelectedDish(dish)}
+                            >
+                              {dish.image && (
+                                <img
+                                  src={dish.image}
+                                  alt={dish.name}
+                                  className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
+                                />
                               )}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <h3 className="font-medium text-gray-900">{dish.name}</h3>
+                                    {tag && (
+                                      <span className="text-lg" title={tag.name}>{tag.emoji}</span>
+                                    )}
+                                  </div>
+                                  <span className="text-primary font-semibold whitespace-nowrap">
+                                    {formatPrice(dish.price)} ₽
+                                  </span>
+                                </div>
+                                {dish.description && (
+                                  <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                                    {dish.description}
+                                  </p>
+                                )}
+                                {(dish.weight || dish.calories) && (
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    {dish.weight && `${dish.weight}`}
+                                    {dish.weight && dish.calories && " • "}
+                                    {dish.calories && `${dish.calories} ккал`}
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   ))
@@ -276,33 +313,49 @@ export default function MenuPage() {
                         {category.name}
                       </h2>
                       <div className="space-y-3">
-                        {categoryDishes.map((dish) => (
-                          <div
-                            key={dish.id}
-                            className="bg-white rounded-xl border border-gray-200 p-4 flex gap-4"
-                          >
-                            {dish.image && (
-                              <img
-                                src={dish.image}
-                                alt={dish.name}
-                                className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
-                              />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-2">
-                                <h3 className="font-medium text-gray-900">{dish.name}</h3>
-                                <span className="text-primary font-semibold whitespace-nowrap">
-                                  {formatPrice(dish.price)} ₽
-                                </span>
-                              </div>
-                              {dish.description && (
-                                <p className="text-sm text-gray-500 mt-1 line-clamp-2">
-                                  {dish.description}
-                                </p>
+                        {categoryDishes.map((dish) => {
+                          const tag = getDishTag(dish.tag_id);
+                          return (
+                            <div
+                              key={dish.id}
+                              className="bg-white rounded-xl border border-gray-200 p-4 flex gap-4 cursor-pointer hover:shadow-md transition-shadow"
+                              onClick={() => setSelectedDish(dish)}
+                            >
+                              {dish.image && (
+                                <img
+                                  src={dish.image}
+                                  alt={dish.name}
+                                  className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
+                                />
                               )}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <h3 className="font-medium text-gray-900">{dish.name}</h3>
+                                    {tag && (
+                                      <span className="text-lg" title={tag.name}>{tag.emoji}</span>
+                                    )}
+                                  </div>
+                                  <span className="text-primary font-semibold whitespace-nowrap">
+                                    {formatPrice(dish.price)} ₽
+                                  </span>
+                                </div>
+                                {dish.description && (
+                                  <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                                    {dish.description}
+                                  </p>
+                                )}
+                                {(dish.weight || dish.calories) && (
+                                  <p className="text-xs text-gray-400 mt-1">
+                                    {dish.weight && `${dish.weight}`}
+                                    {dish.weight && dish.calories && " • "}
+                                    {dish.calories && `${dish.calories} ккал`}
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -311,35 +364,99 @@ export default function MenuPage() {
         )}
       </main>
 
+      {selectedDish && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setSelectedDish(null)}
+          />
+          <div className="relative bg-white w-full max-w-lg sm:max-w-2xl max-h-[85vh] overflow-hidden rounded-t-2xl sm:rounded-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            {selectedDish.image && (
+              <div className="relative h-48 sm:h-64">
+                <img
+                  src={selectedDish.image}
+                  alt={selectedDish.name}
+                  className="w-full h-full object-cover"
+                />
+                <button
+                  onClick={() => setSelectedDish(null)}
+                  className="absolute top-3 right-3 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white hover:bg-black/70 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
+            <div className="p-4 sm:p-6 overflow-y-auto max-h-[calc(85vh-12rem)]">
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl sm:text-2xl font-bold text-gray-900">{selectedDish.name}</h2>
+                    {getDishTag(selectedDish.tag_id) && (
+                      <span className="text-2xl">{getDishTag(selectedDish.tag_id)!.emoji}</span>
+                    )}
+                  </div>
+                  {(selectedDish.weight || selectedDish.calories) && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {selectedDish.weight && `${selectedDish.weight}`}
+                      {selectedDish.weight && selectedDish.calories && " • "}
+                      {selectedDish.calories && `${selectedDish.calories} ккал`}
+                    </p>
+                  )}
+                </div>
+                <p className="text-xl sm:text-2xl font-bold text-primary">
+                  {formatPrice(selectedDish.price)} ₽
+                </p>
+              </div>
+              
+              {selectedDish.description && (
+                <p className="text-gray-600 mb-4 whitespace-pre-wrap">{selectedDish.description}</p>
+              )}
+              
+              {selectedDish.allergens && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+                  <p className="text-sm font-medium text-amber-800">
+                    ⚠️ Аллергены: {selectedDish.allergens}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div
         className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
       >
         <div className="max-w-3xl mx-auto">
-          <Button
-            onClick={handleCallWaiter}
-            disabled={calling || called}
-            className="w-full"
-            size="lg"
-          >
-            {called ? (
-              <span className="flex items-center gap-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Официант вызван
-              </span>
-            ) : calling ? (
-              "Вызов..."
-            ) : (
-              <span className="flex items-center gap-2">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-                </svg>
-                Вызвать официанта
-              </span>
-            )}
-          </Button>
+          {showWaiterButton && (
+            <Button
+              onClick={handleCallWaiter}
+              disabled={calling || called}
+              className="w-full"
+              size="lg"
+            >
+              {called ? (
+                <span className="flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Официант вызван
+                </span>
+              ) : calling ? (
+                "Вызов..."
+              ) : (
+                <span className="flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                  </svg>
+                  Вызвать официанта
+                </span>
+              )}
+            </Button>
+          )}
         </div>
       </div>
     </div>

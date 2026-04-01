@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { CategoryCard } from "./CategoryCard";
 import { DishCard } from "./DishCard";
+import { TagsPanel } from "./TagsPanel";
 
 export function MenuEditor() {
   const { state, dispatch } = useStore();
@@ -23,8 +24,12 @@ export function MenuEditor() {
   const [newDishDesc, setNewDishDesc] = useState("");
   const [newDishPrice, setNewDishPrice] = useState("");
   const [newDishImage, setNewDishImage] = useState("");
+  const [newDishWeight, setNewDishWeight] = useState("");
+  const [newDishCalories, setNewDishCalories] = useState("");
+  const [newDishAllergens, setNewDishAllergens] = useState("");
+  const [newDishTagId, setNewDishTagId] = useState("");
   const [newDishCategoryIds, setNewDishCategoryIds] = useState<string[]>([]);
-  const [viewMode, setViewMode] = useState<"categories" | "dishes">("categories");
+  const [viewMode, setViewMode] = useState<"categories" | "dishes" | "tags">("categories");
   const [addingCategory, setAddingCategory] = useState(false);
   const [addingDish, setAddingDish] = useState(false);
 
@@ -92,9 +97,13 @@ export function MenuEditor() {
         body: JSON.stringify({
           menuId: menu.id,
           name: newDishName.trim(),
-          description: newDishDesc.trim() || undefined,
+          description: newDishDesc.trim() || null,
           price: parseFloat(newDishPrice) || 0,
-          image: newDishImage.trim() || undefined,
+          image: newDishImage.trim() || null,
+          weight: newDishWeight.trim() || null,
+          calories: newDishCalories ? parseInt(newDishCalories) : null,
+          allergens: newDishAllergens.trim() || null,
+          tag_id: newDishTagId || null,
           categoryIds: newDishCategoryIds,
         }),
       });
@@ -109,6 +118,10 @@ export function MenuEditor() {
             description: dish.description,
             price: dish.price,
             image: dish.image,
+            weight: dish.weight,
+            calories: dish.calories,
+            allergens: dish.allergens,
+            tag_id: dish.tag_id,
           },
         });
 
@@ -123,6 +136,10 @@ export function MenuEditor() {
         setNewDishDesc("");
         setNewDishPrice("");
         setNewDishImage("");
+        setNewDishWeight("");
+        setNewDishCalories("");
+        setNewDishAllergens("");
+        setNewDishTagId("");
         setNewDishCategoryIds([]);
         setShowAddDish(false);
       }
@@ -162,14 +179,21 @@ export function MenuEditor() {
               variant={viewMode === "dishes" ? "primary" : "secondary"}
               onClick={() => setViewMode("dishes")}
             >
-              Все блюда
+              Блюда
+            </Button>
+            <Button
+              size="sm"
+              variant={viewMode === "tags" ? "primary" : "secondary"}
+              onClick={() => setViewMode("tags")}
+            >
+              Теги
             </Button>
           </div>
         </div>
       </header>
 
       <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        {viewMode === "categories" ? (
+        {viewMode === "categories" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">
@@ -207,7 +231,9 @@ export function MenuEditor() {
               </div>
             )}
           </div>
-        ) : (
+        )}
+
+        {viewMode === "dishes" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900">
@@ -236,6 +262,8 @@ export function MenuEditor() {
             )}
           </div>
         )}
+
+        {viewMode === "tags" && <TagsPanel />}
       </div>
 
       <Modal
@@ -282,6 +310,10 @@ export function MenuEditor() {
           setNewDishDesc("");
           setNewDishPrice("");
           setNewDishImage("");
+          setNewDishWeight("");
+          setNewDishCalories("");
+          setNewDishAllergens("");
+          setNewDishTagId("");
           setNewDishCategoryIds([]);
         }}
         title="Добавить блюдо"
@@ -325,6 +357,59 @@ export function MenuEditor() {
             value={newDishImage}
             onChange={(e) => setNewDishImage(e.target.value)}
           />
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Вес/Объём"
+              placeholder="200 г"
+              value={newDishWeight}
+              onChange={(e) => setNewDishWeight(e.target.value)}
+            />
+            <Input
+              label="Ккал"
+              type="number"
+              placeholder="150"
+              value={newDishCalories}
+              onChange={(e) => setNewDishCalories(e.target.value)}
+            />
+          </div>
+          <Input
+            label="Аллергены"
+            placeholder="Глютен, молоко, орехи"
+            value={newDishAllergens}
+            onChange={(e) => setNewDishAllergens(e.target.value)}
+          />
+          {state.tags.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Тег</label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setNewDishTagId("")}
+                  className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                    !newDishTagId
+                      ? "bg-gray-200 text-gray-700"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  Без тега
+                </button>
+                {state.tags.map((tag) => (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    onClick={() => setNewDishTagId(tag.id)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors ${
+                      newDishTagId === tag.id
+                        ? "bg-primary text-white"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {tag.emoji} {tag.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {categories.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">

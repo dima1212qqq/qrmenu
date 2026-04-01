@@ -62,12 +62,24 @@ export function CategoryCard({ category, menuId, prevCategoryId, nextCategoryId 
   const handleMoveUp = async () => {
     if (!prevCategoryId) return;
     try {
-      await fetch(`/api/categories/${category.id}`, {
+      const res = await fetch(`/api/categories/${category.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ swapWithId: prevCategoryId }),
       });
-      window.location.reload();
+      if (res.ok) {
+        const prevCategory = state.categories.find(c => c.id === prevCategoryId);
+        if (prevCategory) {
+          dispatch({
+            type: "UPDATE_CATEGORY",
+            payload: { ...category, sort_order: prevCategory.sort_order },
+          });
+          dispatch({
+            type: "UPDATE_CATEGORY",
+            payload: { ...prevCategory, sort_order: category.sort_order },
+          });
+        }
+      }
     } catch (error) {
       console.error("Failed to move category:", error);
     }
@@ -76,12 +88,24 @@ export function CategoryCard({ category, menuId, prevCategoryId, nextCategoryId 
   const handleMoveDown = async () => {
     if (!nextCategoryId) return;
     try {
-      await fetch(`/api/categories/${category.id}`, {
+      const res = await fetch(`/api/categories/${category.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ swapWithId: nextCategoryId }),
       });
-      window.location.reload();
+      if (res.ok) {
+        const nextCategory = state.categories.find(c => c.id === nextCategoryId);
+        if (nextCategory) {
+          dispatch({
+            type: "UPDATE_CATEGORY",
+            payload: { ...category, sort_order: nextCategory.sort_order },
+          });
+          dispatch({
+            type: "UPDATE_CATEGORY",
+            payload: { ...nextCategory, sort_order: category.sort_order },
+          });
+        }
+      }
     } catch (error) {
       console.error("Failed to move category:", error);
     }

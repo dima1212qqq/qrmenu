@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCategories, getDishCategoriesForMenu, getDishes, getMenu, getOrganizationBySlug } from "@/lib/db";
+import { getCategories, getDishCategoriesForMenu, getDishes, getMenu, getOrganizationBySlug, getTags } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -20,10 +20,11 @@ export async function GET(
       return NextResponse.json({ error: "Menu not found" }, { status: 404 });
     }
 
-    const [categories, dishes, dishCategories] = await Promise.all([
+    const [categories, dishes, dishCategories, tags] = await Promise.all([
       getCategories(menuId),
       getDishes(menuId),
       getDishCategoriesForMenu(menuId),
+      getTags(org.id),
     ]);
 
     return NextResponse.json({
@@ -37,6 +38,11 @@ export async function GET(
         categories,
         dishes,
         dishCategories,
+        tags,
+        settings: {
+          ...menu.settings,
+          showWaiterButton: org.settings.showWaiterButton,
+        },
       },
     });
   } catch (error) {

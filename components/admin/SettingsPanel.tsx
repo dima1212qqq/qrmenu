@@ -9,6 +9,7 @@ interface Settings {
   telegramBotToken: string | null;
   telegramChatId: string | null;
   soundEnabled: boolean;
+  showWaiterButton: boolean;
 }
 
 interface SettingsPanelProps {
@@ -21,6 +22,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     telegramBotToken: "",
     telegramChatId: "",
     soundEnabled: true,
+    showWaiterButton: true,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -42,6 +44,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           telegramBotToken: data.telegramBotToken || "",
           telegramChatId: data.telegramChatId || "",
           soundEnabled: data.soundEnabled ?? true,
+          showWaiterButton: data.showWaiterButton ?? true,
         });
       }
     } catch (error) {
@@ -61,6 +64,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           telegramBotToken: settings.telegramBotToken || null,
           telegramChatId: settings.telegramChatId || null,
           soundEnabled: settings.soundEnabled,
+          showWaiterButton: settings.showWaiterButton,
         }),
       });
       onClose();
@@ -122,6 +126,19 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
         </div>
       ) : (
         <div className="space-y-6">
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-3">📱 Кнопка вызова официанта</h3>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.showWaiterButton}
+                onChange={(e) => setSettings({ ...settings, showWaiterButton: e.target.checked })}
+                className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+              />
+              <span className="text-sm text-gray-600">Показывать кнопку &quot;Вызвать официанта&quot;</span>
+            </label>
+          </div>
+
           <div>
             <h3 className="text-sm font-medium text-gray-700 mb-3">🔊 Звуковые уведомления</h3>
             <label className="flex items-center gap-3 cursor-pointer">

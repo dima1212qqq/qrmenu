@@ -12,6 +12,7 @@ export interface MenuSettings {
   telegramBotToken: string | null;
   telegramChatId: string | null;
   soundEnabled: boolean;
+  showWaiterButton: boolean;
 }
 
 export interface Category {
@@ -29,6 +30,16 @@ export interface Dish {
   description?: string | null;
   price: number;
   image?: string | null;
+  weight?: string | null;
+  calories?: number | null;
+  allergens?: string | null;
+  tag_id?: string | null;
+}
+
+export interface Tag {
+  id: string;
+  name: string;
+  emoji: string;
 }
 
 export interface DishCategory {
@@ -64,6 +75,7 @@ export interface AppState {
   dishes: Dish[];
   categories: Category[];
   dishCategories: DishCategory[];
+  tags: Tag[];
   activeMenuId: string | null;
   activeCategoryId: string | null;
   loading: boolean;
@@ -79,6 +91,7 @@ export type Action =
   | { type: "SET_DISHES"; payload: Dish[] }
   | { type: "SET_CATEGORIES"; payload: Category[] }
   | { type: "SET_DISH_CATEGORIES"; payload: DishCategory[] }
+  | { type: "SET_TAGS"; payload: Tag[] }
   | { type: "SET_FULL_MENU"; payload: Menu }
   | { type: "CREATE_MENU"; payload: Menu }
   | { type: "UPDATE_MENU"; payload: Menu }
@@ -96,4 +109,7 @@ export type Action =
   | { type: "REMOVE_DISH_FROM_CATEGORY"; payload: { dishId: string; categoryId: string } }
   | { type: "SET_USERS"; payload: User[] }
   | { type: "ADD_USER"; payload: User }
-  | { type: "DELETE_USER"; payload: string };
+  | { type: "DELETE_USER"; payload: string }
+  | { type: "CREATE_TAG"; payload: Tag }
+  | { type: "UPDATE_TAG"; payload: Tag }
+  | { type: "DELETE_TAG"; payload: string };

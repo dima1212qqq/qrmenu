@@ -18,17 +18,20 @@ enum WaiterCallStatus {
 }
 
 model Organization {
-  id               String @id @default(uuid())
-  name             String
-  slug             String @unique
-  createdAt        BigInt @map("created_at")
-  telegramBotToken String? @map("telegram_bot_token")
-  telegramChatId   String? @map("telegram_chat_id")
-  soundEnabled     Boolean @default(true) @map("sound_enabled")
-  showWaiterButton Boolean @default(true) @map("show_waiter_button")
-  users            User[]
-  menus            Menu[]
-  tags             Tag[]
+  id                String @id @default(uuid())
+  name              String
+  slug              String @unique
+  createdAt         BigInt @map("created_at")
+  telegramBotToken  String? @map("telegram_bot_token")
+  telegramChatId    String? @map("telegram_chat_id")
+  soundEnabled      Boolean @default(true) @map("sound_enabled")
+  showWaiterButton  Boolean @default(true) @map("show_waiter_button")
+  reviewRedirectUrl String? @map("review_redirect_url")
+  reviewStarThreshold Int @default(5) @map("review_star_threshold")
+  users             User[]
+  menus             Menu[]
+  tags              Tag[]
+  reviews           Review[]
 
   @@map("organizations")
 }
@@ -125,7 +128,7 @@ model DishCategory {
 
 model WaiterCall {
   id          String           @id @default(uuid())
-  menuId      String           @map("menu_id")
+  menuId      String @map("menu_id")
   tableNumber String?          @map("table_number")
   createdAt   BigInt           @map("created_at")
   status      WaiterCallStatus
@@ -133,4 +136,17 @@ model WaiterCall {
 
   @@index([menuId])
   @@map("waiter_calls")
+}
+
+model Review {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  rating         Int
+  feedback       String?
+  phone          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("reviews")
 }

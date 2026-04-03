@@ -67,6 +67,17 @@ export interface OrganizationSettings {
   telegramChatId: string | null;
   soundEnabled: boolean;
   showWaiterButton: boolean;
+  reviewRedirectUrl: string | null;
+  reviewStarThreshold: number;
+}
+
+export interface Review {
+  id: string;
+  organization_id: string;
+  rating: number;
+  feedback: string | null;
+  phone: string | null;
+  created_at: Date;
 }
 
 export type MenuSettings = AppMenuSettings;
@@ -203,12 +214,16 @@ function mapSettings(source: {
   telegramChatId: string | null;
   soundEnabled: boolean;
   showWaiterButton?: boolean;
+  reviewRedirectUrl?: string | null;
+  reviewStarThreshold?: number;
 }): OrganizationSettings {
   return {
     telegramBotToken: source.telegramBotToken,
     telegramChatId: source.telegramChatId,
     soundEnabled: source.soundEnabled,
     showWaiterButton: source.showWaiterButton ?? true,
+    reviewRedirectUrl: source.reviewRedirectUrl ?? null,
+    reviewStarThreshold: source.reviewStarThreshold ?? 5,
   };
 }
 
@@ -387,6 +402,8 @@ export async function getOrganizationSettings(orgId: string): Promise<Organizati
     telegramChatId: null,
     soundEnabled: DEFAULT_SOUND_ENABLED,
     showWaiterButton: true,
+    reviewRedirectUrl: null,
+    reviewStarThreshold: 5,
   };
 }
 
@@ -401,6 +418,8 @@ export async function updateOrganizationSettings(
       ...(settings.telegramChatId !== undefined ? { telegramChatId: settings.telegramChatId } : {}),
       ...(settings.soundEnabled !== undefined ? { soundEnabled: settings.soundEnabled } : {}),
       ...(settings.showWaiterButton !== undefined ? { showWaiterButton: settings.showWaiterButton } : {}),
+      ...(settings.reviewRedirectUrl !== undefined ? { reviewRedirectUrl: settings.reviewRedirectUrl } : {}),
+      ...(settings.reviewStarThreshold !== undefined ? { reviewStarThreshold: settings.reviewStarThreshold } : {}),
     },
   });
 
@@ -917,4 +936,46 @@ export async function sendTelegramNotification(
     console.error("Failed to send Telegram notification:", error);
     return false;
   }
+}
+
+export async function createReview(
+  organizationId: string,
+  rating: number,
+  feedback: string | null,
+  phone: string | null
+): Promise<Review> {
+  const review = await prisma.review.create({
+    data: {
+      organizationId,
+      rating,
+      feedback,
+      phone,
+    } as any,
+  });
+
+  return {
+    id: review.id,
+    organization_id: review.organizationId,
+    rating: review.rating,
+    feedback: review.feedback,
+    phone: (review as any).phone || null,
+    created_at: review.createdAt,
+  };
+}
+
+export async function getOrganizationBySlugForReview(slug: string) {
+  const org = await prisma.organization.findUnique({
+    where: { slug },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      telegramBotToken: true,
+      telegramChatId: true,
+      reviewRedirectUrl: true,
+      reviewStarThreshold: true,
+    },
+  });
+
+  return org;
 }

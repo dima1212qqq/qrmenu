@@ -10,6 +10,8 @@ interface Settings {
   telegramChatId: string | null;
   soundEnabled: boolean;
   showWaiterButton: boolean;
+  reviewRedirectUrl: string | null;
+  reviewStarThreshold: number;
 }
 
 interface SettingsPanelProps {
@@ -23,6 +25,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     telegramChatId: "",
     soundEnabled: true,
     showWaiterButton: true,
+    reviewRedirectUrl: "",
+    reviewStarThreshold: 5,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -45,6 +49,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           telegramChatId: data.telegramChatId || "",
           soundEnabled: data.soundEnabled ?? true,
           showWaiterButton: data.showWaiterButton ?? true,
+          reviewRedirectUrl: data.reviewRedirectUrl || "",
+          reviewStarThreshold: data.reviewStarThreshold ?? 5,
         });
       }
     } catch (error) {
@@ -65,6 +71,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           telegramChatId: settings.telegramChatId || null,
           soundEnabled: settings.soundEnabled,
           showWaiterButton: settings.showWaiterButton,
+          reviewRedirectUrl: settings.reviewRedirectUrl || null,
+          reviewStarThreshold: settings.reviewStarThreshold,
         }),
       });
       onClose();
@@ -150,6 +158,54 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               />
               <span className="text-sm text-gray-600">Воспроизводить звук при новом вызове</span>
             </label>
+          </div>
+
+          <div className="border-t border-gray-200 pt-6">
+            <h3 className="text-sm font-medium text-gray-700 mb-3">⭐ Сбор отзывов</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Настройте QR-код для сбора отзывов. При оценке ниже порога, отзыв будет отправлен в Telegram.
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Ссылка для редиректа (при высокой оценке)
+                </label>
+                <Input
+                  placeholder="https://yandex.ru/maps/..."
+                  value={settings.reviewRedirectUrl || ""}
+                  onChange={(e) => setSettings({ ...settings, reviewRedirectUrl: e.target.value })}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  2GIS, Яндекс.Карты и т.д.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Порог перенаправления (звезд)
+                </label>
+                <div className="flex gap-2">
+                  {[4, 5].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setSettings({ ...settings, reviewStarThreshold: num })}
+                      className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+                        settings.reviewStarThreshold === num
+                          ? "bg-primary text-white"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      {num} ★
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  При оценке {settings.reviewStarThreshold} ★ и выше - редирект, ниже - отзыв в Telegram
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="border-t border-gray-200 pt-6">

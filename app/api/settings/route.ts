@@ -35,6 +35,8 @@ export async function PATCH(request: NextRequest) {
       telegramChatId: updates.telegramChatId || null,
       soundEnabled: updates.soundEnabled ?? true,
       showWaiterButton: updates.showWaiterButton ?? true,
+      reviewRedirectUrl: updates.reviewRedirectUrl || null,
+      reviewStarThreshold: updates.reviewStarThreshold ?? 5,
     });
 
     return NextResponse.json(settings);

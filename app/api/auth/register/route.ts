@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createOrganization, createUser, generateUniqueSlug, getUserByEmail } from "@/lib/db";
+import { addUserToOrganization, createOrganization, createUser, generateUniqueSlug, getUserByEmail } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
 
 export async function POST(request: NextRequest) {
@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
 
     if (!name || !email || !password || !organizationName) {
       return NextResponse.json(
-        { error: "Р’СЃРµ РїРѕР»СЏ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹" },
+        { error: "All fields are required" },
         { status: 400 }
       );
     }
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const existingUser = await getUserByEmail(email);
     if (existingUser) {
       return NextResponse.json(
-        { error: "РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ СЃ С‚Р°РєРёРј email СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚" },
+        { error: "Пользователь с таким EMAIL уже существует" },
         { status: 400 }
       );
     }
@@ -42,23 +42,21 @@ export async function POST(request: NextRequest) {
       email,
       password,
       name,
-      role: "owner",
-      organization_id: orgId,
       created_at: Date.now(),
     });
+
+    await addUserToOrganization(userId, orgId, "owner");
 
     return NextResponse.json({
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role,
-      organization_id: user.organization_id,
       organization: org,
     }, { status: 201 });
   } catch (error) {
     console.error("Registration error:", error);
     return NextResponse.json(
-      { error: "РћС€РёР±РєР° РїСЂРё СЂРµРіРёСЃС‚СЂР°С†РёРё" },
+      { error: "Registration error" },
       { status: 500 }
     );
   }

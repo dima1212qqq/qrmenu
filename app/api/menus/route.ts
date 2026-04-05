@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { createMenu, getMenus } from "@/lib/db";
+import { createMenu, getMenus, getUserOrganization } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user) {
@@ -13,7 +13,17 @@ export async function GET() {
     }
 
     const user = session.user as any;
-    const menus = await getMenus(user.organization_id);
+    const orgId = request.headers.get("x-organization-id") ?? request.nextUrl.searchParams.get("orgId");
+    if (!orgId) {
+      return NextResponse.json({ error: "orgId is required" }, { status: 400 });
+    }
+
+    const userOrg = await getUserOrganization(user.id, orgId);
+    if (!userOrg) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const menus = await getMenus(orgId);
     return NextResponse.json(menus);
   } catch (error) {
     console.error("Failed to fetch menus:", error);
@@ -29,15 +39,24 @@ export async function POST(request: NextRequest) {
     }
 
     const user = session.user as any;
-    const { name, description, logo } = await request.json();
+    const { orgId, name, description, logo } = await request.json();
+
+    if (!orgId) {
+      return NextResponse.json({ error: "orgId is required" }, { status: 400 });
+    }
 
     if (!name) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
 
+    const userOrg = await getUserOrganization(user.id, orgId);
+    if (!userOrg || userOrg.role !== "owner") {
+      return NextResponse.json({ error: "Only owners can create menus" }, { status: 403 });
+    }
+
     const menu = await createMenu({
       id: uuidv4(),
-      organization_id: user.organization_id,
+      organization_id: orgId,
       name,
       description: description || null,
       logo: logo || null,

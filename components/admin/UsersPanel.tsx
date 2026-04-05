@@ -19,34 +19,45 @@ export function UsersPanel({ isOpen, onClose }: UsersPanelProps) {
   const [newUser, setNewUser] = useState({ name: "", email: "", password: "" });
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
 
   const handleAddUser = async () => {
-    if (!newUser.name || !newUser.email || !newUser.password) return;
+    if (!newUser.email || !state.activeOrganizationId) return;
     setAdding(true);
+    setError("");
     try {
       const res = await fetch("/api/users", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId,
+        },
         body: JSON.stringify(newUser),
       });
       if (res.ok) {
-        const user = await res.json();
-        dispatch({ type: "ADD_USER", payload: user });
+        await refreshUsers();
         setNewUser({ name: "", email: "", password: "" });
         setShowAddModal(false);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Ошибка при создании пользователя");
       }
-    } catch (error) {
-      console.error("Failed to add user:", error);
+    } catch (err) {
+      console.error("Failed to add user:", err);
+      setError("Ошибка при создании пользователя");
     } finally {
       setAdding(false);
     }
   };
 
   const handleDeleteUser = async () => {
-    if (!userToDelete) return;
+    if (!userToDelete || !state.activeOrganizationId) return;
     setDeleting(true);
     try {
-      const res = await fetch(`/api/users/${userToDelete.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/users/${userToDelete.id}`, {
+        method: "DELETE",
+        headers: { "x-organization-id": state.activeOrganizationId },
+      });
       if (res.ok) {
         dispatch({ type: "DELETE_USER", payload: userToDelete.id });
         setShowDeleteModal(false);
@@ -64,8 +75,20 @@ export function UsersPanel({ isOpen, onClose }: UsersPanelProps) {
     setShowDeleteModal(true);
   };
 
-  const owner = state.users.find((u) => u.role === "owner");
-  const waiters = state.users.filter((u) => u.role === "waiter");
+  const currentUserOrg = state.userOrganizations.find(
+    (uo) => uo.organization_id === state.activeOrganizationId
+  );
+  const currentUserRole = currentUserOrg?.role || "waiter";
+
+  const usersWithRoles = state.users.map((user) => {
+    const userOrg = state.userOrganizations.find(
+      (uo) => uo.user_id === user.id && uo.organization_id === state.activeOrganizationId
+    );
+    return { ...user, role: userOrg?.role || "waiter" } as (typeof user) & { role: "owner" | "waiter" };
+  });
+
+  const owner = usersWithRoles.find((u) => u.role === "owner");
+  const waiters = usersWithRoles.filter((u) => u.role === "waiter");
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-end">
@@ -159,6 +182,7 @@ export function UsersPanel({ isOpen, onClose }: UsersPanelProps) {
         onClose={() => {
           setShowAddModal(false);
           setNewUser({ name: "", email: "", password: "" });
+          setError("");
         }}
         title="Добавить официанта"
         footer={
@@ -166,7 +190,7 @@ export function UsersPanel({ isOpen, onClose }: UsersPanelProps) {
             <Button variant="secondary" onClick={() => setShowAddModal(false)}>
               Отмена
             </Button>
-            <Button onClick={handleAddUser} disabled={!newUser.name || !newUser.email || !newUser.password || adding}>
+            <Button onClick={handleAddUser} disabled={!newUser.email || adding}>
               {adding ? "Добавление..." : "Добавить"}
             </Button>
           </>
@@ -194,6 +218,15 @@ export function UsersPanel({ isOpen, onClose }: UsersPanelProps) {
             value={newUser.password}
             onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
           />
+          <p className="text-xs text-gray-500">
+            Р•СЃР»Рё Сѓ СЃРѕС‚СЂСѓРґРЅРёРєР° СѓР¶Рµ РµСЃС‚СЊ Р°РєРєР°СѓРЅС‚, РґРѕСЃС‚Р°С‚РѕС‡РЅРѕ СѓРєР°Р·Р°С‚СЊ С‚РѕР»СЊРєРѕ email.
+            РРјСЏ Рё РїР°СЂРѕР»СЊ РЅСѓР¶РЅС‹ С‚РѕР»СЊРєРѕ РґР»СЏ РЅРѕРІРѕРіРѕ Р°РєРєР°СѓРЅС‚Р°.
+          </p>
+          {error && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+              {error}
+            </p>
+          )}
         </div>
       </Modal>
 

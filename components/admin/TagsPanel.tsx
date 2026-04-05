@@ -10,6 +10,10 @@ const EMOJI_OPTIONS = ["⭐", "🔥", "🌶️", "❤️", "💎", "🏆", "✨"
 
 export function TagsPanel() {
   const { state, dispatch } = useStore();
+  const currentUserOrg = state.userOrganizations.find(
+    (organization) => organization.organization_id === state.activeOrganizationId
+  );
+  const isOwner = currentUserOrg?.role === "owner";
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
@@ -20,12 +24,15 @@ export function TagsPanel() {
   const tags = state.tags;
 
   const handleCreateTag = async () => {
-    if (!newTagName.trim()) return;
+    if (!newTagName.trim() || !state.activeOrganizationId) return;
     setSaving(true);
     try {
       const res = await fetch("/api/tags", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId,
+        },
         body: JSON.stringify({
           name: newTagName.trim(),
           emoji: newTagEmoji,
@@ -46,12 +53,15 @@ export function TagsPanel() {
   };
 
   const handleUpdateTag = async () => {
-    if (!editingTag || !newTagName.trim()) return;
+    if (!editingTag || !newTagName.trim() || !state.activeOrganizationId) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/tags/${editingTag.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId,
+        },
         body: JSON.stringify({
           name: newTagName.trim(),
           emoji: newTagEmoji,
@@ -71,8 +81,12 @@ export function TagsPanel() {
   };
 
   const handleDeleteTag = async (tagId: string) => {
+    if (!state.activeOrganizationId) return;
     try {
-      const res = await fetch(`/api/tags/${tagId}`, { method: "DELETE" });
+      const res = await fetch(`/api/tags/${tagId}`, {
+        method: "DELETE",
+        headers: { "x-organization-id": state.activeOrganizationId },
+      });
       if (res.ok) {
         dispatch({ type: "DELETE_TAG", payload: tagId });
       }
@@ -94,12 +108,14 @@ export function TagsPanel() {
         <h2 className="text-lg font-semibold text-gray-900">
           Теги ({tags.length})
         </h2>
+        {isOwner && (
         <Button size="sm" onClick={() => setShowAddModal(true)}>
           <svg className="w-4 h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
           <span>Добавить тег</span>
         </Button>
+        )}
       </div>
 
       {tags.length === 0 ? (
@@ -118,6 +134,7 @@ export function TagsPanel() {
                 <span className="text-2xl">{tag.emoji}</span>
                 <span className="font-medium text-gray-900">{tag.name}</span>
               </div>
+              {isOwner && (
               <div className="flex gap-2">
                 <Button variant="ghost" size="sm" onClick={() => openEditModal(tag)}>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -130,6 +147,7 @@ export function TagsPanel() {
                   </svg>
                 </Button>
               </div>
+              )}
             </div>
           ))}
         </div>

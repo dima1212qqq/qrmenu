@@ -15,6 +15,11 @@ interface DishCardProps {
 
 export function DishCard({ dish, menuId }: DishCardProps) {
   const { state, dispatch } = useStore();
+  const currentUserOrg = state.userOrganizations.find(
+    (organization) => organization.organization_id === state.activeOrganizationId
+  );
+  const isOwner = currentUserOrg?.role === "owner";
+  const canToggleAvailability = Boolean(currentUserOrg);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editName, setEditName] = useState(dish.name);
@@ -67,12 +72,15 @@ export function DishCard({ dish, menuId }: DishCardProps) {
   };
 
   const handleSave = async () => {
-    if (!editName.trim() || !editPrice) return;
+    if (!editName.trim() || !editPrice || !state.activeOrganizationId) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/dishes/${dish.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId,
+        },
         body: JSON.stringify({
           name: editName.trim(),
           description: editDesc.trim() || null,
@@ -128,12 +136,40 @@ export function DishCard({ dish, menuId }: DishCardProps) {
   };
 
   const handleDelete = async () => {
+    if (!state.activeOrganizationId) return;
     try {
-      await fetch(`/api/dishes/${dish.id}`, { method: "DELETE" });
+      await fetch(`/api/dishes/${dish.id}`, {
+        method: "DELETE",
+        headers: { "x-organization-id": state.activeOrganizationId },
+      });
       dispatch({ type: "DELETE_DISH", payload: { menuId, dishId: dish.id } });
       setShowDeleteConfirm(false);
     } catch (error) {
       console.error("Failed to delete dish:", error);
+    }
+  };
+
+  const handleToggleAvailability = async () => {
+    if (!state.activeOrganizationId || !canToggleAvailability) return;
+    try {
+      const newAvailability = !(dish.is_available ?? true);
+      const res = await fetch(`/api/dishes/${dish.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId,
+        },
+        body: JSON.stringify({ is_available: newAvailability }),
+      });
+      if (res.ok) {
+        const updatedDish = await res.json();
+        dispatch({
+          type: "UPDATE_DISH",
+          payload: updatedDish,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to toggle availability:", error);
     }
   };
 
@@ -202,7 +238,37 @@ export function DishCard({ dish, menuId }: DishCardProps) {
                   ))}
               </div>
             )}
+            {canToggleAvailability && (
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={handleToggleAvailability}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-colors ${
+                    dish.is_available === false
+                      ? "bg-red-100 text-red-700 hover:bg-red-200"
+                      : "bg-green-100 text-green-700 hover:bg-green-200"
+                  }`}
+                >
+                  {dish.is_available === false ? (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                      </svg>
+                      Скрыто
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      Доступно
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
+          {isOwner && (
           <div className="flex flex-col gap-1 p-2 border-l border-gray-100">
             <Button variant="ghost" size="sm" onClick={() => setShowEditModal(true)}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -215,6 +281,7 @@ export function DishCard({ dish, menuId }: DishCardProps) {
               </svg>
             </Button>
           </div>
+          )}
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getOrganization } from "@/lib/db";
+import { getUserOrganizations } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -12,15 +12,15 @@ export async function GET() {
     }
 
     const user = session.user as any;
-    const org = await getOrganization(user.organization_id);
+    const userOrgs = await getUserOrganizations(user.id);
 
-    if (!org) {
-      return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+    if (!userOrgs || userOrgs.length === 0) {
+      return NextResponse.json({ error: "No organizations found" }, { status: 404 });
     }
 
-    return NextResponse.json(org);
+    return NextResponse.json(userOrgs);
   } catch (error) {
-    console.error("Failed to fetch organization:", error);
-    return NextResponse.json({ error: "Failed to fetch organization" }, { status: 500 });
+    console.error("Failed to fetch organizations:", error);
+    return NextResponse.json({ error: "Failed to fetch organizations" }, { status: 500 });
   }
 }

@@ -16,6 +16,10 @@ export function MenuEditor() {
   const menu = useActiveMenu();
   const categories = useCategoriesForMenu(menu?.id || null);
   const menuDishes = useDishesForMenu(menu?.id || null);
+  const currentUserOrg = state.userOrganizations.find(
+    (organization) => organization.organization_id === state.activeOrganizationId
+  );
+  const isOwner = currentUserOrg?.role === "owner";
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [showAddDish, setShowAddDish] = useState(false);
   const [newCatName, setNewCatName] = useState("");
@@ -52,12 +56,15 @@ export function MenuEditor() {
   const sortedCategories = [...categories].sort((a, b) => a.sort_order - b.sort_order);
 
   const handleAddCategory = async () => {
-    if (!newCatName.trim()) return;
+    if (!newCatName.trim() || !state.activeOrganizationId) return;
     setAddingCategory(true);
     try {
       const res = await fetch("/api/categories", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId,
+        },
         body: JSON.stringify({
           menuId: menu.id,
           name: newCatName.trim(),
@@ -88,12 +95,15 @@ export function MenuEditor() {
   };
 
   const handleAddDish = async () => {
-    if (!newDishName.trim() || !newDishPrice) return;
+    if (!newDishName.trim() || !newDishPrice || !state.activeOrganizationId) return;
     setAddingDish(true);
     try {
       const res = await fetch("/api/dishes", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId,
+        },
         body: JSON.stringify({
           menuId: menu.id,
           name: newDishName.trim(),
@@ -199,13 +209,15 @@ export function MenuEditor() {
               <h2 className="text-lg font-semibold text-gray-900">
                 Категории ({categories.length})
               </h2>
-              <Button size="sm" onClick={() => setShowAddCategory(true)}>
+              {isOwner && (
+                <Button size="sm" onClick={() => setShowAddCategory(true)}>
                 <svg className="w-4 h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
                 <span className="hidden sm:inline">Добавить категорию</span>
                 <span className="sm:hidden">Добавить</span>
               </Button>
+              )}
             </div>
 
             {sortedCategories.length === 0 ? (
@@ -239,13 +251,15 @@ export function MenuEditor() {
               <h2 className="text-lg font-semibold text-gray-900">
                 Блюда ({menuDishes.length})
               </h2>
-              <Button size="sm" onClick={() => setShowAddDish(true)}>
+              {isOwner && (
+                <Button size="sm" onClick={() => setShowAddDish(true)}>
                 <svg className="w-4 h-4 mr-1 sm:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
                 <span className="hidden sm:inline">Добавить блюдо</span>
                 <span className="sm:hidden">Добавить</span>
               </Button>
+              )}
             </div>
 
             {menuDishes.length === 0 ? (

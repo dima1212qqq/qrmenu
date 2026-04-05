@@ -23,7 +23,7 @@ export function QRModal({ isOpen, onClose, menuId, menuName, orgSlug }: QRModalP
 
   useEffect(() => {
     if (isOpen && menuId && orgSlug) {
-      const url = getMenuUrl(orgSlug, menuId, tableNumber);
+      const url = getMenuUrl(orgSlug, tableNumber);
       setMenuUrl(url);
       setLoading(true);
       generateQRCode(url).then((dataUrl) => {
@@ -31,7 +31,7 @@ export function QRModal({ isOpen, onClose, menuId, menuName, orgSlug }: QRModalP
         setLoading(false);
       });
     }
-  }, [isOpen, menuId, tableNumber, orgSlug]);
+  }, [isOpen, tableNumber, orgSlug]);
 
   const handleDownload = () => {
     if (menuUrl) {
@@ -125,9 +125,9 @@ export function QRModal({ isOpen, onClose, menuId, menuName, orgSlug }: QRModalP
   );
 }
 
-function getMenuUrl(orgSlug: string, menuId: string, tableNumber?: string): string {
+function getMenuUrl(orgSlug: string, tableNumber?: string): string {
   if (typeof window === "undefined") return "";
-  const base = `${window.location.origin}/menu/${orgSlug}/${menuId}`;
+  const base = `${window.location.origin}/menu/${orgSlug}`;
   if (tableNumber) {
     return `${base}?table=${encodeURIComponent(tableNumber)}`;
   }

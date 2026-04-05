@@ -104,8 +104,6 @@ interface UserCreateInput {
   email: string;
   password: string;
   name: string;
-  role: "owner" | "waiter";
-  organization_id: string;
   created_at?: number;
 }
 
@@ -182,6 +180,7 @@ type DishUpdateInput = Partial<{
   calories: number | null;
   allergens: string | null;
   tag_id: string | null;
+  is_available: boolean;
 }>;
 
 type WaiterCallUpdateInput = Partial<{
@@ -257,8 +256,6 @@ function toUser(record: PrismaUser): StoredUser {
     email: record.email,
     password: record.password,
     name: record.name,
-    role: toRole(record.role),
-    organization_id: record.organizationId,
     created_at: toNumber(record.createdAt),
   };
 }
@@ -297,6 +294,7 @@ function toDish(record: PrismaDish): AppDish {
     calories: record.calories,
     allergens: record.allergens,
     tag_id: record.tagId,
+    is_available: record.isAvailable,
   };
 }
 
@@ -392,6 +390,45 @@ export async function getOrganizationBySlug(slug: string): Promise<OrganizationR
   return organization ? toOrganization(organization) : undefined;
 }
 
+export async function getUserOrganizations(userId: string): Promise<{ organization: OrganizationRecord; role: "owner" | "waiter" }[]> {
+  const userOrganizations = await (prisma as any).userOrganization.findMany({
+    where: { userId },
+    include: {
+      organization: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return userOrganizations.map((uo: any) => ({
+    organization: toOrganization(uo.organization),
+    role: uo.role === UserRole.owner ? "owner" : "waiter",
+  }));
+}
+
+export async function getUserOrganization(
+  userId: string,
+  organizationId: string
+): Promise<{ organization: OrganizationRecord; role: "owner" | "waiter" } | undefined> {
+  const userOrganization = await (prisma as any).userOrganization.findFirst({
+    where: {
+      userId,
+      organizationId,
+    },
+    include: {
+      organization: true,
+    },
+  });
+
+  if (!userOrganization) {
+    return undefined;
+  }
+
+  return {
+    organization: toOrganization(userOrganization.organization),
+    role: userOrganization.role === UserRole.owner ? "owner" : "waiter",
+  };
+}
+
 export async function getOrganizationSettings(orgId: string): Promise<OrganizationSettings> {
   const organization = await prisma.organization.findUnique({
     where: { id: orgId },
@@ -426,15 +463,6 @@ export async function updateOrganizationSettings(
   return mapSettings(organization);
 }
 
-export async function getUsers(organizationId: string): Promise<StoredUser[]> {
-  const users = await prisma.user.findMany({
-    where: { organizationId },
-    orderBy: { createdAt: "asc" },
-  });
-
-  return users.map(toUser);
-}
-
 export async function getUser(id: string): Promise<StoredUser | undefined> {
   const user = await prisma.user.findUnique({ where: { id } });
   return user ? toUser(user) : undefined;
@@ -454,13 +482,36 @@ export async function createUser(input: UserCreateInput): Promise<StoredUser> {
       email: input.email,
       password: hashedPassword,
       name: input.name,
-      role: toPrismaRole(input.role),
-      organizationId: input.organization_id,
       createdAt: BigInt(input.created_at ?? Date.now()),
-    },
+    } as any,
   });
 
   return toUser(user);
+}
+
+export async function addUserToOrganization(
+  userId: string,
+  organizationId: string,
+  role: "owner" | "waiter"
+): Promise<void> {
+  await (prisma as any).userOrganization.create({
+    data: {
+      userId,
+      organizationId,
+      role: role === "owner" ? UserRole.owner : UserRole.waiter,
+      createdAt: BigInt(Date.now()),
+    },
+  });
+}
+
+export async function getUsersForOrganization(organizationId: string): Promise<StoredUser[]> {
+  const userOrganizations = await (prisma as any).userOrganization.findMany({
+    where: { organizationId },
+    include: { user: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return userOrganizations.map((uo: any) => toUser(uo.user));
 }
 
 export async function verifyUser(email: string, password: string): Promise<StoredUser | null> {
@@ -479,7 +530,7 @@ export async function verifyUser(email: string, password: string): Promise<Store
 
 export async function deleteUser(id: string): Promise<boolean> {
   const user = await prisma.user.findUnique({ where: { id } });
-  if (!user || user.role === UserRole.owner) {
+  if (!user) {
     return false;
   }
 
@@ -678,7 +729,8 @@ export async function createDish(input: DishCreateInput): Promise<AppDish> {
       calories: input.calories ?? null,
       allergens: input.allergens ?? null,
       tagId: input.tag_id ?? null,
-    },
+      isAvailable: true,
+    } as any,
   });
 
   return toDish(dish);
@@ -701,7 +753,8 @@ export async function updateDish(id: string, updates: DishUpdateInput): Promise<
       ...(updates.calories !== undefined ? { calories: updates.calories } : {}),
       ...(updates.allergens !== undefined ? { allergens: updates.allergens } : {}),
       ...(updates.tag_id !== undefined ? { tagId: updates.tag_id } : {}),
-    },
+      ...(updates.is_available !== undefined ? { isAvailable: updates.is_available } : {}),
+    } as any,
   });
 
   return toDish(dish);
@@ -869,6 +922,17 @@ export async function getAllTags(): Promise<AppTag[]> {
 
 export async function getTag(id: string): Promise<AppTag | undefined> {
   const tag = await prisma.tag.findUnique({ where: { id } });
+  return tag ? toTag(tag) : undefined;
+}
+
+export async function getTagForOrganization(id: string, organizationId: string): Promise<AppTag | undefined> {
+  const tag = await prisma.tag.findFirst({
+    where: {
+      id,
+      organizationId,
+    },
+  });
+
   return tag ? toTag(tag) : undefined;
 }
 

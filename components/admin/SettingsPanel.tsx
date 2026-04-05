@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { useStore } from "@/lib/store-api";
 
 interface Settings {
   telegramBotToken: string | null;
@@ -20,6 +21,7 @@ interface SettingsPanelProps {
 }
 
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
+  const { state } = useStore();
   const [settings, setSettings] = useState<Settings>({
     telegramBotToken: "",
     telegramChatId: "",
@@ -35,13 +37,17 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
   useEffect(() => {
     if (isOpen) {
+      setLoading(true);
       fetchSettings();
     }
-  }, [isOpen]);
+  }, [isOpen, state.activeOrganizationId]);
 
   const fetchSettings = async () => {
+    if (!state.activeOrganizationId) return;
     try {
-      const res = await fetch("/api/settings");
+      const res = await fetch("/api/settings", {
+        headers: { "x-organization-id": state.activeOrganizationId },
+      });
       if (res.ok) {
         const data = await res.json();
         setSettings({
@@ -61,11 +67,15 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   };
 
   const handleSave = async () => {
+    if (!state.activeOrganizationId) return;
     setSaving(true);
     try {
       await fetch("/api/settings", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId,
+        },
         body: JSON.stringify({
           telegramBotToken: settings.telegramBotToken || null,
           telegramChatId: settings.telegramChatId || null,
@@ -84,7 +94,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   };
 
   const handleTest = async () => {
-    if (!settings.telegramBotToken || !settings.telegramChatId) {
+    if (!settings.telegramBotToken || !settings.telegramChatId || !state.activeOrganizationId) {
       setTestMessage("Сначала заполните токен и chat ID");
       return;
     }
@@ -94,7 +104,10 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     try {
       const res = await fetch("/api/settings", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId,
+        },
         body: JSON.stringify({
           message: "🔔 Тестовое сообщение!\n\nЕсли вы видите это, значит Telegram уведомления настроены правильно.",
         }),

@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { signOut, useSession } from "next-auth/react";
-import { StoreProvider, useStore, useActiveMenu, useCategoriesForMenu, useDishesForMenu, useDishCategoriesForDish, useCategoriesForDish } from "@/lib/store-api";
+import { useSession } from "next-auth/react";
+import { StoreProvider, useStore } from "@/lib/store-api";
 import { Sidebar } from "@/components/admin/Sidebar";
 import { MenuEditor } from "@/components/admin/MenuEditor";
 import { WaiterCalls } from "@/components/admin/WaiterCalls";
@@ -19,10 +19,10 @@ function AdminLayoutContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (user?.organization_id) {
+    if (state.activeOrganizationId) {
       refreshUsers();
     }
-  }, [user?.organization_id, refreshUsers]);
+  }, [state.activeOrganizationId, refreshUsers]);
 
   useEffect(() => {
     if (sidebarOpen) {
@@ -34,6 +34,11 @@ function AdminLayoutContent() {
       document.body.style.overflow = "";
     };
   }, [sidebarOpen]);
+
+  const currentUserOrg = state.userOrganizations.find(
+    (uo) => uo.organization_id === state.activeOrganizationId
+  );
+  const isOwner = currentUserOrg?.role === "owner";
 
   if (state.loading) {
     return (
@@ -54,9 +59,7 @@ function AdminLayoutContent() {
         onShowUsers={() => setShowUsers(true)}
         isOpen={sidebarOpen}
         onCloseSidebar={() => setSidebarOpen(false)}
-        organizationName={state.organization?.name || ""}
         userName={user?.name || ""}
-        userRole={user?.role || "waiter"}
       />
       
       {sidebarOpen && (
@@ -90,7 +93,7 @@ function AdminLayoutContent() {
         <SettingsPanel isOpen={showSettings} onClose={() => setShowSettings(false)} />
       )}
 
-      {showUsers && user?.role === "owner" && (
+      {showUsers && isOwner && (
         <UsersPanel isOpen={showUsers} onClose={() => setShowUsers(false)} />
       )}
     </div>

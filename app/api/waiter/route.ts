@@ -4,6 +4,7 @@ import {
   createWaiterCall,
   getMenu,
   getOrganizationSettings,
+  getUserOrganization,
   getWaiterCallsForOrganization,
   sendTelegramNotification,
 } from "@/lib/db";
@@ -19,18 +20,28 @@ export async function GET(request: NextRequest) {
     }
 
     const user = session.user as any;
+    const orgId = request.headers.get("x-organization-id");
+    if (!orgId) {
+      return NextResponse.json({ error: "x-organization-id header is required" }, { status: 400 });
+    }
+
+    const userOrg = await getUserOrganization(user.id, orgId);
+    if (!userOrg) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
     const menuId = searchParams.get("menuId");
 
     let calls;
     if (menuId) {
       const menu = await getMenu(menuId);
-      if (!menu || menu.organization_id !== user.organization_id) {
+      if (!menu || menu.organization_id !== orgId) {
         return NextResponse.json({ error: "Menu not found" }, { status: 404 });
       }
-      calls = (await getWaiterCallsForOrganization(user.organization_id)).filter((call) => call.menu_id === menuId);
+      calls = (await getWaiterCallsForOrganization(orgId)).filter((call) => call.menu_id === menuId);
     } else {
-      calls = await getWaiterCallsForOrganization(user.organization_id);
+      calls = await getWaiterCallsForOrganization(orgId);
     }
 
     return NextResponse.json(calls);
@@ -48,6 +59,16 @@ export async function POST(request: NextRequest) {
     }
 
     const user = session.user as any;
+    const orgId = request.headers.get("x-organization-id");
+    if (!orgId) {
+      return NextResponse.json({ error: "x-organization-id header is required" }, { status: 400 });
+    }
+
+    const userOrg = await getUserOrganization(user.id, orgId);
+    if (!userOrg) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const { menuId, tableNumber } = await request.json();
 
     if (!menuId) {
@@ -55,7 +76,7 @@ export async function POST(request: NextRequest) {
     }
 
     const menu = await getMenu(menuId);
-    if (!menu || menu.organization_id !== user.organization_id) {
+    if (!menu || menu.organization_id !== orgId) {
       return NextResponse.json({ error: "Menu not found" }, { status: 404 });
     }
 
@@ -67,7 +88,7 @@ export async function POST(request: NextRequest) {
       status: "pending",
     });
 
-    const organizationSettings = await getOrganizationSettings(user.organization_id);
+    const organizationSettings = await getOrganizationSettings(orgId);
     const menuSettings = menu.settings;
 
     const telegramToken = menuSettings.telegramBotToken || organizationSettings.telegramBotToken;

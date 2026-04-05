@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { deleteTag, getTag, updateTag } from "@/lib/db";
+import { deleteTag, getTagForOrganization, getUserOrganization, updateTag } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +14,18 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const orgId = request.headers.get("x-organization-id");
+    if (!orgId) {
+      return NextResponse.json({ error: "x-organization-id header is required" }, { status: 400 });
+    }
+
     const user = session.user as any;
-    if (user.role !== "owner") {
+    const userOrg = await getUserOrganization(user.id, orgId);
+    if (!userOrg || userOrg.role !== "owner") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const tag = await getTag(params.id);
+    const tag = await getTagForOrganization(params.id, orgId);
     if (!tag) {
       return NextResponse.json({ error: "Tag not found" }, { status: 404 });
     }
@@ -49,12 +55,18 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const orgId = request.headers.get("x-organization-id");
+    if (!orgId) {
+      return NextResponse.json({ error: "x-organization-id header is required" }, { status: 400 });
+    }
+
     const user = session.user as any;
-    if (user.role !== "owner") {
+    const userOrg = await getUserOrganization(user.id, orgId);
+    if (!userOrg || userOrg.role !== "owner") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const tag = await getTag(params.id);
+    const tag = await getTagForOrganization(params.id, orgId);
     if (!tag) {
       return NextResponse.json({ error: "Tag not found" }, { status: 404 });
     }

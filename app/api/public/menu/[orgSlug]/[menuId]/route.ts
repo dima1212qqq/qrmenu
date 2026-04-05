@@ -27,6 +27,8 @@ export async function GET(
       getTags(org.id),
     ]);
 
+    const visibleDishes = dishes.filter((d) => d.is_available !== false);
+
     return NextResponse.json({
       organization: {
         id: org.id,
@@ -36,7 +38,7 @@ export async function GET(
       menu: {
         ...menu,
         categories,
-        dishes,
+        dishes: visibleDishes,
         dishCategories,
         tags,
         settings: {

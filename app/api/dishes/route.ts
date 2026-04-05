@@ -6,6 +6,7 @@ import {
   getDishes,
   getDishesForOrganization,
   getMenu,
+  getUserOrganization,
 } from "@/lib/db";
 import { v4 as uuidv4 } from "uuid";
 
@@ -21,17 +22,31 @@ export async function GET(request: NextRequest) {
     const user = session.user as any;
     const { searchParams } = new URL(request.url);
     const menuId = searchParams.get("menuId");
+    const orgId = request.headers.get("x-organization-id") ?? searchParams.get("orgId");
 
     let dishes;
 
     if (menuId) {
       const menu = await getMenu(menuId);
-      if (!menu || menu.organization_id !== user.organization_id) {
+      if (!menu) {
         return NextResponse.json({ error: "Menu not found" }, { status: 404 });
       }
+
+      const userOrg = await getUserOrganization(user.id, menu.organization_id);
+      if (!userOrg) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
       dishes = await getDishes(menuId);
+    } else if (orgId) {
+      const userOrg = await getUserOrganization(user.id, orgId);
+      if (!userOrg) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      dishes = await getDishesForOrganization(orgId);
     } else {
-      dishes = await getDishesForOrganization(user.organization_id);
+      return NextResponse.json({ error: "menuId or orgId is required" }, { status: 400 });
     }
 
     return NextResponse.json(dishes);
@@ -56,8 +71,13 @@ export async function POST(request: NextRequest) {
     }
 
     const menu = await getMenu(menuId);
-    if (!menu || menu.organization_id !== user.organization_id) {
+    if (!menu) {
       return NextResponse.json({ error: "Menu not found" }, { status: 404 });
+    }
+
+    const userOrg = await getUserOrganization(user.id, menu.organization_id);
+    if (!userOrg || userOrg.role !== "owner") {
+      return NextResponse.json({ error: "Only owners can create dishes" }, { status: 403 });
     }
 
     const dishId = uuidv4();

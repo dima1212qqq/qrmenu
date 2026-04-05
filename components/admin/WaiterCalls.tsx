@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/Button";
+import { useStore } from "@/lib/store-api";
 
 interface WaiterCall {
   id: string;
@@ -16,6 +17,7 @@ interface WaiterCallsProps {
 }
 
 export function WaiterCalls({ onClose }: WaiterCallsProps) {
+  const { state } = useStore();
   const [calls, setCalls] = useState<WaiterCall[]>([]);
   const [loading, setLoading] = useState(true);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
@@ -109,8 +111,11 @@ export function WaiterCalls({ onClose }: WaiterCallsProps) {
   }, [stopTitleFlash]);
 
   const fetchCalls = useCallback(async () => {
+    if (!state.activeOrganizationId) return;
     try {
-      const res = await fetch("/api/waiter");
+      const res = await fetch("/api/waiter", {
+        headers: { "x-organization-id": state.activeOrganizationId },
+      });
       if (res.ok) {
         const data = await res.json();
         setCalls(data);
@@ -143,7 +148,7 @@ export function WaiterCalls({ onClose }: WaiterCallsProps) {
     } finally {
       setLoading(false);
     }
-  }, [notificationPermission, playNotificationSound, startTitleFlash]);
+  }, [notificationPermission, playNotificationSound, startTitleFlash, state.activeOrganizationId]);
 
   useEffect(() => {
     fetchCalls();
@@ -152,10 +157,14 @@ export function WaiterCalls({ onClose }: WaiterCallsProps) {
   }, [fetchCalls]);
 
   const handleComplete = async (id: string) => {
+    if (!state.activeOrganizationId) return;
     try {
       await fetch(`/api/waiter/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId,
+        },
         body: JSON.stringify({ status: "completed" }),
       });
       fetchCalls();
@@ -165,8 +174,12 @@ export function WaiterCalls({ onClose }: WaiterCallsProps) {
   };
 
   const handleDelete = async (id: string) => {
+    if (!state.activeOrganizationId) return;
     try {
-      await fetch(`/api/waiter/${id}`, { method: "DELETE" });
+      await fetch(`/api/waiter/${id}`, {
+        method: "DELETE",
+        headers: { "x-organization-id": state.activeOrganizationId },
+      });
       fetchCalls();
     } catch (error) {
       console.error("Failed to delete call:", error);

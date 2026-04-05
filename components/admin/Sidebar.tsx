@@ -15,9 +15,7 @@ interface SidebarProps {
   onShowUsers: () => void;
   isOpen?: boolean;
   onCloseSidebar?: () => void;
-  organizationName: string;
   userName: string;
-  userRole: string;
 }
 
 export function Sidebar({ 
@@ -26,29 +24,38 @@ export function Sidebar({
   onShowUsers,
   isOpen = true, 
   onCloseSidebar,
-  organizationName,
-  userName,
-  userRole 
+  userName
 }: SidebarProps) {
   const { state, dispatch } = useStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [showReviewQRModal, setShowReviewQRModal] = useState(false);
+  const [showCreateOrganizationModal, setShowCreateOrganizationModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [menuToDelete, setMenuToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [newOrganizationName, setNewOrganizationName] = useState("");
   const [newMenuName, setNewMenuName] = useState("");
   const [newMenuDesc, setNewMenuDesc] = useState("");
   const [creating, setCreating] = useState(false);
+  const [creatingOrganization, setCreatingOrganization] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const currentOrg = state.organization;
+  const currentUserOrg = state.userOrganizations.find(
+    (uo) => uo.organization_id === state.activeOrganizationId
+  );
+  const userRole = currentUserOrg?.role || "waiter";
+  const canCreateOrganizations = state.userOrganizations.some((organization) => organization.role === "owner");
+
   const handleCreateMenu = async () => {
-    if (!newMenuName.trim()) return;
+    if (!newMenuName.trim() || !state.activeOrganizationId || userRole !== "owner") return;
     setCreating(true);
     try {
       const res = await fetch("/api/menus", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          orgId: state.activeOrganizationId,
           name: newMenuName.trim(),
           description: newMenuDesc.trim() || undefined,
         }),
@@ -68,11 +75,76 @@ export function Sidebar({
     }
   };
 
+  const handleCreateOrganization = async () => {
+    if (!newOrganizationName.trim()) return;
+
+    setCreatingOrganization(true);
+    try {
+      const res = await fetch("/api/organizations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: newOrganizationName.trim(),
+        }),
+      });
+
+      if (res.ok) {
+        const created = await res.json();
+        const createdOrganization = created.organization;
+
+        dispatch({
+          type: "SET_ORGANIZATIONS",
+          payload: [...state.organizations, createdOrganization],
+        });
+        dispatch({
+          type: "SET_USER_ORGANIZATIONS",
+          payload: [
+            ...state.userOrganizations,
+            {
+              id: createdOrganization.id,
+              user_id: "",
+              organization_id: createdOrganization.id,
+              role: created.role,
+            },
+          ],
+        });
+        dispatch({ type: "SET_ORGANIZATION", payload: createdOrganization });
+        dispatch({ type: "SET_ACTIVE_ORGANIZATION", payload: createdOrganization.id });
+        dispatch({ type: "SET_ACTIVE_MENU", payload: null });
+
+        setNewOrganizationName("");
+        setShowCreateOrganizationModal(false);
+        onCloseSidebar?.();
+      }
+    } catch (error) {
+      console.error("Failed to create organization:", error);
+    } finally {
+      setCreatingOrganization(false);
+    }
+  };
+
+  const handleOrganizationChange = (organizationId: string) => {
+    const nextOrganization = state.organizations.find((organization) => organization.id === organizationId);
+    if (!nextOrganization) {
+      return;
+    }
+
+    dispatch({ type: "SET_ORGANIZATION", payload: nextOrganization });
+    dispatch({ type: "SET_ACTIVE_ORGANIZATION", payload: organizationId });
+    dispatch({ type: "SET_ACTIVE_MENU", payload: null });
+    onCloseSidebar?.();
+  };
+
   const handleDeleteMenu = async () => {
-    if (!menuToDelete) return;
+    if (!menuToDelete || !state.activeOrganizationId) return;
     setDeleting(true);
     try {
-      const res = await fetch(`/api/menus/${menuToDelete.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/menus/${menuToDelete.id}`, {
+        method: "DELETE",
+        headers: { "x-organization-id": state.activeOrganizationId },
+      });
       if (res.ok) {
         dispatch({ type: "DELETE_MENU", payload: menuToDelete.id });
         setShowDeleteModal(false);
@@ -120,9 +192,38 @@ export function Sidebar({
             </svg>
           </button>
         </div>
-        {organizationName && (
-          <p className="text-xs text-gray-500 mt-1 truncate">{organizationName}</p>
-        )}
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Заведение
+            </span>
+            {canCreateOrganizations && (
+            <button
+              onClick={() => setShowCreateOrganizationModal(true)}
+              className="p-1 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
+              title="Создать заведение"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+            )}
+          </div>
+          <select
+            value={state.activeOrganizationId || ""}
+            onChange={(e) => handleOrganizationChange(e.target.value)}
+            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            {state.organizations.map((organization) => (
+              <option key={organization.id} value={organization.id}>
+                {organization.name}
+              </option>
+            ))}
+          </select>
+          {currentOrg?.slug && (
+            <p className="text-xs text-gray-500 mt-2 truncate">{currentOrg.slug}</p>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3">
@@ -130,16 +231,18 @@ export function Sidebar({
           <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
             Меню
           </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowCreateModal(true)}
-            className="h-7 w-7 p-0"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-          </Button>
+          {userRole === "owner" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowCreateModal(true)}
+              className="h-7 w-7 p-0"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </Button>
+          )}
         </div>
 
         {state.menus.length === 0 ? (
@@ -241,7 +344,7 @@ export function Sidebar({
                   variant="secondary"
                   className="w-full"
                   onClick={() => {
-                    const url = `${window.location.origin}/menu/${state.organization?.slug}/${activeMenu.id}?share=true`;
+                    const url = `${window.location.origin}/menu/${state.organization?.slug}?share=true`;
                     navigator.clipboard.writeText(url);
                     alert("Ссылка скопирована!");
                   }}
@@ -305,6 +408,37 @@ export function Sidebar({
       `}>
         {sidebarContent}
       </aside>
+
+      {canCreateOrganizations && (
+      <Modal
+        isOpen={showCreateOrganizationModal}
+        onClose={() => {
+          setShowCreateOrganizationModal(false);
+          setNewOrganizationName("");
+        }}
+        title="Создать заведение"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowCreateOrganizationModal(false)}>
+              Отмена
+            </Button>
+            <Button onClick={handleCreateOrganization} disabled={!newOrganizationName.trim() || creatingOrganization}>
+              {creatingOrganization ? "Создание..." : "Создать"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Название заведения"
+            placeholder="Кафе на Невском"
+            value={newOrganizationName}
+            onChange={(e) => setNewOrganizationName(e.target.value)}
+            autoFocus
+          />
+        </div>
+      </Modal>
+      )}
 
       <Modal
         isOpen={showCreateModal}

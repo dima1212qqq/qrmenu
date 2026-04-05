@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { deleteCategory, getCategory, getMenu, updateCategory } from "@/lib/db";
+import { deleteCategory, getCategory, getMenu, getUserOrganization, updateCategory } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,6 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const user = session.user as any;
     const category = await getCategory(params.id);
 
     if (!category) {
@@ -22,8 +21,15 @@ export async function PUT(
     }
 
     const menu = await getMenu(category.menu_id);
-    if (!menu || menu.organization_id !== user.organization_id) {
+    const orgId = request.headers.get("x-organization-id");
+    if (!menu || (orgId && menu.organization_id !== orgId)) {
       return NextResponse.json({ error: "Category not found" }, { status: 404 });
+    }
+
+    const user = session.user as any;
+    const userOrg = await getUserOrganization(user.id, menu.organization_id);
+    if (!userOrg || userOrg.role !== "owner") {
+      return NextResponse.json({ error: "Only owners can update categories" }, { status: 403 });
     }
 
     const { name, description, sort_order, swapWithId } = await request.json();
@@ -64,7 +70,6 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const user = session.user as any;
     const category = await getCategory(params.id);
 
     if (!category) {
@@ -72,8 +77,15 @@ export async function DELETE(
     }
 
     const menu = await getMenu(category.menu_id);
-    if (!menu || menu.organization_id !== user.organization_id) {
+    const orgId = request.headers.get("x-organization-id");
+    if (!menu || (orgId && menu.organization_id !== orgId)) {
       return NextResponse.json({ error: "Category not found" }, { status: 404 });
+    }
+
+    const user = session.user as any;
+    const userOrg = await getUserOrganization(user.id, menu.organization_id);
+    if (!userOrg || userOrg.role !== "owner") {
+      return NextResponse.json({ error: "Only owners can delete categories" }, { status: 403 });
     }
 
     await deleteCategory(params.id);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { deleteUser, getUser } from "@/lib/db";
+import { deleteUser, getUser, getUserOrganizations } from "@/lib/db";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +16,14 @@ export async function DELETE(
     }
 
     const user = session.user as any;
+    const orgId = request.headers.get("x-organization-id");
+    if (!orgId) {
+      return NextResponse.json({ error: "x-organization-id header is required" }, { status: 400 });
+    }
 
-    if (user.role !== "owner") {
+    const userOrgs = await getUserOrganizations(user.id);
+    const userOrg = userOrgs.find((uo) => uo.organization.id === orgId);
+    if (!userOrg || userOrg.role !== "owner") {
       return NextResponse.json({ error: "Only owners can delete users" }, { status: 403 });
     }
 
@@ -25,15 +32,16 @@ export async function DELETE(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    if (userToDelete.organization_id !== user.organization_id) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const userToDeleteOrgs = await getUserOrganizations(params.id);
+    const userToDeleteOrg = userToDeleteOrgs.find((uo) => uo.organization.id === orgId);
+    if (!userToDeleteOrg || userToDeleteOrg.role === "owner") {
+      return NextResponse.json({ error: "Cannot delete owner or user not in organization" }, { status: 400 });
     }
 
-    if (userToDelete.role === "owner") {
-      return NextResponse.json({ error: "Cannot delete owner" }, { status: 400 });
-    }
+    await (prisma as any).userOrganization.deleteMany({
+      where: { userId: params.id, organizationId: orgId },
+    });
 
-    await deleteUser(params.id);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Failed to delete user:", error);

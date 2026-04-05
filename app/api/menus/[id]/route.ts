@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { deleteMenu, getCategories, getDishCategoriesForMenu, getDishes, getMenu, updateMenu } from "@/lib/db";
+import {
+  deleteMenu,
+  getCategories,
+  getDishCategoriesForMenu,
+  getDishes,
+  getMenu,
+  getUserOrganization,
+  updateMenu,
+} from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +25,13 @@ export async function GET(
     const user = session.user as any;
     const menu = await getMenu(params.id);
 
-    if (!menu || menu.organization_id !== user.organization_id) {
+    if (!menu) {
       return NextResponse.json({ error: "Menu not found" }, { status: 404 });
+    }
+
+    const userOrg = await getUserOrganization(user.id, menu.organization_id);
+    if (!userOrg) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const [categories, dishes, dishCategories] = await Promise.all([
@@ -52,8 +65,13 @@ export async function PUT(
     const user = session.user as any;
     const menu = await getMenu(params.id);
 
-    if (!menu || menu.organization_id !== user.organization_id) {
+    if (!menu) {
       return NextResponse.json({ error: "Menu not found" }, { status: 404 });
+    }
+
+    const userOrg = await getUserOrganization(user.id, menu.organization_id);
+    if (!userOrg || userOrg.role !== "owner") {
+      return NextResponse.json({ error: "Only owners can update menus" }, { status: 403 });
     }
 
     const updates = await request.json();
@@ -76,14 +94,20 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const user = session.user as any;
+    const orgId = request.headers.get("x-organization-id");
+    if (!orgId) {
+      return NextResponse.json({ error: "x-organization-id header is required" }, { status: 400 });
+    }
+
     const menu = await getMenu(params.id);
 
-    if (!menu || menu.organization_id !== user.organization_id) {
+    if (!menu || menu.organization_id !== orgId) {
       return NextResponse.json({ error: "Menu not found" }, { status: 404 });
     }
 
-    if (user.role !== "owner") {
+    const user = session.user as any;
+    const userOrg = await getUserOrganization(user.id, orgId);
+    if (!userOrg || userOrg.role !== "owner") {
       return NextResponse.json({ error: "Only owners can delete menus" }, { status: 403 });
     }
 

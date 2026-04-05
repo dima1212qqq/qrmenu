@@ -34,6 +34,7 @@ export interface Dish {
   calories?: number | null;
   allergens?: string | null;
   tag_id?: string | null;
+  is_available?: boolean;
 }
 
 export interface Tag {
@@ -55,19 +56,24 @@ export interface WaiterCall {
   status: string;
 }
 
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: "owner" | "waiter";
-  organization_id: string;
-}
-
 export interface Organization {
   id: string;
   name: string;
   slug: string;
   created_at: number;
+}
+
+export interface UserOrganization {
+  id: string;
+  user_id: string;
+  organization_id: string;
+  role: "owner" | "waiter";
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
 }
 
 export interface AppState {
@@ -80,13 +86,19 @@ export interface AppState {
   activeCategoryId: string | null;
   loading: boolean;
   organization: Organization | null;
+  organizations: Organization[];
   users: User[];
+  userOrganizations: UserOrganization[];
+  activeOrganizationId: string | null;
 }
 
 export type Action =
   | { type: "SET_STATE"; payload: AppState }
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "SET_ORGANIZATION"; payload: Organization }
+  | { type: "SET_ORGANIZATIONS"; payload: Organization[] }
+  | { type: "SET_USER_ORGANIZATIONS"; payload: UserOrganization[] }
+  | { type: "SET_ACTIVE_ORGANIZATION"; payload: string | null }
   | { type: "SET_MENUS"; payload: Menu[] }
   | { type: "SET_DISHES"; payload: Dish[] }
   | { type: "SET_CATEGORIES"; payload: Category[] }

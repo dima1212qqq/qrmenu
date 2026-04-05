@@ -18,22 +18,36 @@ enum WaiterCallStatus {
 }
 
 model Organization {
-  id                String @id @default(uuid())
-  name              String
-  slug              String @unique
-  createdAt         BigInt @map("created_at")
-  telegramBotToken  String? @map("telegram_bot_token")
-  telegramChatId    String? @map("telegram_chat_id")
-  soundEnabled      Boolean @default(true) @map("sound_enabled")
-  showWaiterButton  Boolean @default(true) @map("show_waiter_button")
-  reviewRedirectUrl String? @map("review_redirect_url")
+  id                 String @id @default(uuid())
+  name               String
+  slug               String @unique
+  createdAt          BigInt @map("created_at")
+  telegramBotToken   String? @map("telegram_bot_token")
+  telegramChatId     String? @map("telegram_chat_id")
+  soundEnabled       Boolean @default(true) @map("sound_enabled")
+  showWaiterButton   Boolean @default(true) @map("show_waiter_button")
+  reviewRedirectUrl  String? @map("review_redirect_url")
   reviewStarThreshold Int @default(5) @map("review_star_threshold")
-  users             User[]
-  menus             Menu[]
-  tags              Tag[]
-  reviews           Review[]
+  userOrganizations  UserOrganization[]
+  menus              Menu[]
+  tags               Tag[]
+  reviews            Review[]
 
   @@map("organizations")
+}
+
+model UserOrganization {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  organizationId String   @map("organization_id")
+  role           UserRole @default(owner)
+  createdAt      BigInt   @map("created_at")
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([organizationId])
+  @@map("user_organizations")
 }
 
 model User {
@@ -41,12 +55,9 @@ model User {
   email          String   @unique
   password       String
   name           String
-  role           UserRole
-  organizationId String   @map("organization_id")
   createdAt      BigInt   @map("created_at")
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userOrganizations UserOrganization[]
 
-  @@index([organizationId])
   @@map("users")
 }
 
@@ -94,6 +105,7 @@ model Dish {
   calories    Int?
   allergens   String?
   tagId       String?  @map("tag_id")
+  isAvailable Boolean @default(true) @map("is_available")
   menu        Menu @relation(fields: [menuId], references: [id], onDelete: Cascade)
   categories  DishCategory[]
   tag         Tag?   @relation(fields: [tagId], references: [id], onDelete: SetNull)

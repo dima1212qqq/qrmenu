@@ -1,7 +1,9 @@
 "use client";
 
 import { createContext, useContext, useReducer, useEffect, ReactNode, useCallback } from "react";
-import { Menu, Category, Dish, DishCategory, User, Organization, Tag, AppState } from "./types";
+import { Menu, Category, Dish, DishCategory, User, Organization, Tag, AppState, UserOrganization } from "./types";
+
+const ACTIVE_ORG_STORAGE_KEY = "menu-qr-active-organization";
 
 const initialState: AppState = {
   menus: [],
@@ -13,6 +15,9 @@ const initialState: AppState = {
   activeCategoryId: null,
   loading: true,
   organization: null,
+  organizations: [],
+  userOrganizations: [],
+  activeOrganizationId: null,
   users: [],
 };
 
@@ -20,6 +25,9 @@ type Action =
   | { type: "SET_STATE"; payload: AppState }
   | { type: "SET_LOADING"; payload: boolean }
   | { type: "SET_ORGANIZATION"; payload: Organization }
+  | { type: "SET_ORGANIZATIONS"; payload: Organization[] }
+  | { type: "SET_USER_ORGANIZATIONS"; payload: UserOrganization[] }
+  | { type: "SET_ACTIVE_ORGANIZATION"; payload: string | null }
   | { type: "SET_MENUS"; payload: Menu[] }
   | { type: "SET_DISHES"; payload: Dish[] }
   | { type: "SET_CATEGORIES"; payload: Category[] }
@@ -57,6 +65,15 @@ function reducer(state: AppState, action: Action): AppState {
 
     case "SET_ORGANIZATION":
       return { ...state, organization: action.payload };
+
+    case "SET_ORGANIZATIONS":
+      return { ...state, organizations: action.payload };
+
+    case "SET_USER_ORGANIZATIONS":
+      return { ...state, userOrganizations: action.payload };
+
+    case "SET_ACTIVE_ORGANIZATION":
+      return { ...state, activeOrganizationId: action.payload };
 
     case "SET_MENUS":
       return { ...state, menus: action.payload };
@@ -205,70 +222,127 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
+  const getHeaders = useCallback(() => {
+    const headers: Record<string, string> = {};
+    if (state.activeOrganizationId) {
+      headers["x-organization-id"] = state.activeOrganizationId;
+    }
+    return headers;
+  }, [state.activeOrganizationId]);
+
   const refreshData = useCallback(async () => {
     try {
       dispatch({ type: "SET_LOADING", payload: true });
+      dispatch({ type: "SET_MENUS", payload: [] });
+      dispatch({ type: "SET_DISHES", payload: [] });
+      dispatch({ type: "SET_CATEGORIES", payload: [] });
+      dispatch({ type: "SET_DISH_CATEGORIES", payload: [] });
+      dispatch({ type: "SET_TAGS", payload: [] });
+      dispatch({ type: "SET_USERS", payload: [] });
+      dispatch({ type: "SET_ACTIVE_MENU", payload: null });
 
-      const [orgRes, menusRes, categoriesRes, dishesRes, dishCatsRes, tagsRes] = await Promise.all([
-        fetch("/api/organizations/me"),
-        fetch("/api/menus"),
-        fetch("/api/categories"),
-        fetch("/api/dishes"),
-        fetch("/api/dish-categories"),
-        fetch("/api/tags"),
-      ]);
+      const orgRes = await fetch("/api/organizations/me");
 
       if (orgRes.ok) {
-        const org = await orgRes.json();
-        dispatch({ type: "SET_ORGANIZATION", payload: org });
-      }
+        const userOrgs = await orgRes.json();
+        const organizations = userOrgs.map((uo: any) => uo.organization);
+        const userOrganizations = userOrgs.map((uo: any) => ({
+          id: uo.organization.id,
+          user_id: "",
+          organization_id: uo.organization.id,
+          role: uo.role,
+        }));
+        
+        dispatch({ type: "SET_ORGANIZATIONS", payload: organizations });
+        dispatch({ type: "SET_USER_ORGANIZATIONS", payload: userOrganizations });
 
-      if (menusRes.ok) {
-        const menus = await menusRes.json();
-        dispatch({ type: "SET_MENUS", payload: menus });
-      }
+        const savedActiveOrgId =
+          typeof window !== "undefined" ? window.localStorage.getItem(ACTIVE_ORG_STORAGE_KEY) : null;
+        const preferredOrgId = state.activeOrganizationId || savedActiveOrgId;
+        const newActiveOrgId =
+          preferredOrgId && organizations.some((organization: Organization) => organization.id === preferredOrgId)
+            ? preferredOrgId
+            : organizations.length > 0
+              ? organizations[0].id
+              : null;
 
-      if (categoriesRes.ok) {
-        const categories = await categoriesRes.json();
-        dispatch({ type: "SET_CATEGORIES", payload: categories });
-      }
+        dispatch({ type: "SET_ACTIVE_ORGANIZATION", payload: newActiveOrgId });
 
-      if (dishesRes.ok) {
-        const dishes = await dishesRes.json();
-        dispatch({ type: "SET_DISHES", payload: dishes });
-      }
+        const activeOrganization = organizations.find((organization: Organization) => organization.id === newActiveOrgId);
+        if (activeOrganization) {
+          dispatch({ type: "SET_ORGANIZATION", payload: activeOrganization });
+        }
+        
+        if (newActiveOrgId) {
+          const headers = { "x-organization-id": newActiveOrgId };
 
-      if (dishCatsRes.ok) {
-        const dishCategories = await dishCatsRes.json();
-        dispatch({ type: "SET_DISH_CATEGORIES", payload: dishCategories });
-      }
+          const [menusRes, categoriesRes, dishesRes, dishCatsRes, tagsRes] = await Promise.all([
+            fetch(`/api/menus?orgId=${newActiveOrgId}`, { headers }),
+            fetch(`/api/categories?orgId=${newActiveOrgId}`, { headers }),
+            fetch(`/api/dishes?orgId=${newActiveOrgId}`, { headers }),
+            fetch("/api/dish-categories", { headers }),
+            fetch("/api/tags", { headers }),
+          ]);
 
-      if (tagsRes.ok) {
-        const tags = await tagsRes.json();
-        dispatch({ type: "SET_TAGS", payload: tags });
+          const menus = menusRes.ok ? await menusRes.json() : [];
+          const categories = categoriesRes.ok ? await categoriesRes.json() : [];
+          const dishes = dishesRes.ok ? await dishesRes.json() : [];
+          const dishCategories = dishCatsRes.ok ? await dishCatsRes.json() : [];
+          const tags = tagsRes.ok ? await tagsRes.json() : [];
+
+          dispatch({ type: "SET_CATEGORIES", payload: categories });
+          dispatch({ type: "SET_DISHES", payload: dishes });
+          dispatch({ type: "SET_DISH_CATEGORIES", payload: dishCategories });
+          dispatch({ type: "SET_TAGS", payload: tags });
+          dispatch({ type: "SET_MENUS", payload: menus });
+
+          const nextActiveMenuId = menus.length > 0 ? menus[0].id : null;
+          dispatch({ type: "SET_ACTIVE_MENU", payload: nextActiveMenuId });
+        }
       }
     } catch (error) {
       console.error("Failed to fetch data:", error);
     } finally {
       dispatch({ type: "SET_LOADING", payload: false });
     }
-  }, []);
+  }, [state.activeOrganizationId]);
 
   const refreshUsers = useCallback(async () => {
+    if (!state.activeOrganizationId) {
+      dispatch({ type: "SET_USERS", payload: [] });
+      return;
+    }
+
     try {
-      const res = await fetch("/api/users");
+      const headers = getHeaders();
+      const res = await fetch("/api/users", { headers });
       if (res.ok) {
         const users = await res.json();
         dispatch({ type: "SET_USERS", payload: users });
+      } else {
+        dispatch({ type: "SET_USERS", payload: [] });
       }
     } catch (error) {
       console.error("Failed to fetch users:", error);
+      dispatch({ type: "SET_USERS", payload: [] });
     }
-  }, []);
+  }, [getHeaders, state.activeOrganizationId]);
 
   useEffect(() => {
     refreshData();
   }, [refreshData]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (state.activeOrganizationId) {
+      window.localStorage.setItem(ACTIVE_ORG_STORAGE_KEY, state.activeOrganizationId);
+    } else {
+      window.localStorage.removeItem(ACTIVE_ORG_STORAGE_KEY);
+    }
+  }, [state.activeOrganizationId]);
 
   return (
     <StoreContext.Provider value={{ state, dispatch, refreshData, refreshUsers }}>

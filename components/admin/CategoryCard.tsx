@@ -15,6 +15,10 @@ interface CategoryCardProps {
 
 export function CategoryCard({ category, menuId, prevCategoryId, nextCategoryId }: CategoryCardProps) {
   const { state, dispatch } = useStore();
+  const currentUserOrg = state.userOrganizations.find(
+    (organization) => organization.organization_id === state.activeOrganizationId
+  );
+  const isOwner = currentUserOrg?.role === "owner";
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editName, setEditName] = useState(category.name);
@@ -24,12 +28,15 @@ export function CategoryCard({ category, menuId, prevCategoryId, nextCategoryId 
   const dishCount = state.dishCategories.filter((dc) => dc.category_id === category.id).length;
 
   const handleSave = async () => {
-    if (!editName.trim()) return;
+    if (!editName.trim() || !state.activeOrganizationId) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/categories/${category.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId,
+        },
         body: JSON.stringify({
           name: editName.trim(),
           description: editDesc.trim() || undefined,
@@ -50,8 +57,12 @@ export function CategoryCard({ category, menuId, prevCategoryId, nextCategoryId 
   };
 
   const handleDelete = async () => {
+    if (!state.activeOrganizationId) return;
     try {
-      await fetch(`/api/categories/${category.id}`, { method: "DELETE" });
+      await fetch(`/api/categories/${category.id}`, {
+        method: "DELETE",
+        headers: { "x-organization-id": state.activeOrganizationId },
+      });
       dispatch({ type: "DELETE_CATEGORY", payload: { menuId: category.menu_id, categoryId: category.id } });
       setShowDeleteConfirm(false);
     } catch (error) {
@@ -60,11 +71,14 @@ export function CategoryCard({ category, menuId, prevCategoryId, nextCategoryId 
   };
 
   const handleMoveUp = async () => {
-    if (!prevCategoryId) return;
+    if (!prevCategoryId || !state.activeOrganizationId) return;
     try {
       const res = await fetch(`/api/categories/${category.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId,
+        },
         body: JSON.stringify({ swapWithId: prevCategoryId }),
       });
       if (res.ok) {
@@ -86,11 +100,14 @@ export function CategoryCard({ category, menuId, prevCategoryId, nextCategoryId 
   };
 
   const handleMoveDown = async () => {
-    if (!nextCategoryId) return;
+    if (!nextCategoryId || !state.activeOrganizationId) return;
     try {
       const res = await fetch(`/api/categories/${category.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId,
+        },
         body: JSON.stringify({ swapWithId: nextCategoryId }),
       });
       if (res.ok) {
@@ -127,6 +144,7 @@ export function CategoryCard({ category, menuId, prevCategoryId, nextCategoryId 
             )}
             <p className="text-xs text-gray-400 mt-2">{dishCount} блюд</p>
           </div>
+          {isOwner && (
           <div className="flex gap-1">
             <Button 
               variant="ghost" 
@@ -162,6 +180,7 @@ export function CategoryCard({ category, menuId, prevCategoryId, nextCategoryId 
               </svg>
             </Button>
           </div>
+          )}
         </div>
       </div>
 

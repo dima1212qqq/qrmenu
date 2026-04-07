@@ -17,6 +17,11 @@ enum WaiterCallStatus {
   completed
 }
 
+enum OrderStatus {
+  pending
+  completed
+}
+
 model Organization {
   id                 String @id @default(uuid())
   name               String
@@ -32,6 +37,7 @@ model Organization {
   menus              Menu[]
   tags               Tag[]
   reviews            Review[]
+  orders             Order[]
 
   @@map("organizations")
 }
@@ -76,6 +82,7 @@ model Menu {
   categories       Category[]
   dishes           Dish[]
   waiterCalls      WaiterCall[]
+  orders           Order[]
 
   @@index([organizationId])
   @@map("menus")
@@ -161,4 +168,34 @@ model Review {
 
   @@index([organizationId])
   @@map("reviews")
+}
+
+model Order {
+  id             String      @id @default(uuid())
+  menuId         String      @map("menu_id")
+  organizationId String      @map("organization_id")
+  tableNumber    String?     @map("table_number")
+  total          Float       @default(0)
+  status         OrderStatus @default(pending)
+  createdAt      BigInt      @map("created_at")
+  menu           Menu        @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items          OrderItem[]
+
+  @@index([menuId])
+  @@index([organizationId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String  @map("order_id")
+  dishId    String  @map("dish_id")
+  dishName  String  @map("dish_name")
+  price     Float
+  quantity  Int
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_items")
 }

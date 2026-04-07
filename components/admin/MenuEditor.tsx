@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { CategoryCard } from "./CategoryCard";
 import { DishCard } from "./DishCard";
 import { TagsPanel } from "./TagsPanel";
+import { useRouter } from "next/navigation";
 
 export function MenuEditor() {
   const { state, dispatch } = useStore();
@@ -33,9 +34,20 @@ export function MenuEditor() {
   const [newDishAllergens, setNewDishAllergens] = useState("");
   const [newDishTagId, setNewDishTagId] = useState("");
   const [newDishCategoryIds, setNewDishCategoryIds] = useState<string[]>([]);
-  const [viewMode, setViewMode] = useState<"categories" | "dishes" | "tags">("categories");
+  const [viewMode, setViewMode] = useState<"categories" | "dishes" | "tags" | "bulk-prices">("categories");
   const [addingCategory, setAddingCategory] = useState(false);
   const [addingDish, setAddingDish] = useState(false);
+  const [showCopyMenu, setShowCopyMenu] = useState(false);
+  const [copyTargetOrgId, setCopyTargetOrgId] = useState("");
+  const [copyNewName, setCopyNewName] = useState("");
+  const [copying, setCopying] = useState(false);
+  const [showEditMenu, setShowEditMenu] = useState(false);
+  const [editMenuName, setEditMenuName] = useState("");
+  const [editMenuDesc, setEditMenuDesc] = useState("");
+  const [updatingMenu, setUpdatingMenu] = useState(false);
+  const [bulkPriceChanges, setBulkPriceChanges] = useState<Record<string, string>>({});
+  const [bulkPriceLoading, setBulkPriceLoading] = useState(false);
+  const router = useRouter();
 
   if (!menu) {
     return (
@@ -166,17 +178,166 @@ export function MenuEditor() {
     );
   };
 
+  const handleCopyMenu = async () => {
+    if (!menu || !copyTargetOrgId) return;
+    setCopying(true);
+    try {
+      const res = await fetch("/api/menus/copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceMenuId: menu.id,
+          targetOrgId: copyTargetOrgId,
+          newName: copyNewName.trim() || undefined,
+        }),
+      });
+      if (res.ok) {
+        const newMenu = await res.json();
+        if (state.activeOrganizationId === copyTargetOrgId) {
+          dispatch({ type: "CREATE_MENU", payload: newMenu });
+        }
+        setShowCopyMenu(false);
+        setCopyTargetOrgId("");
+        setCopyNewName("");
+        if (state.activeOrganizationId !== copyTargetOrgId) {
+          router.refresh();
+        }
+      } else {
+        const error = await res.json();
+        alert(error.error || "Ошибка при копировании меню");
+      }
+    } catch (error) {
+      console.error("Failed to copy menu:", error);
+      alert("Ошибка при копировании меню");
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const handleUpdateMenu = async () => {
+    if (!menu || !editMenuName.trim()) return;
+    setUpdatingMenu(true);
+    try {
+      const res = await fetch(`/api/menus/${menu.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId || "",
+        },
+        body: JSON.stringify({
+          name: editMenuName.trim(),
+          description: editMenuDesc.trim() || null,
+        }),
+      });
+      if (res.ok) {
+        const updatedMenu = await res.json();
+        dispatch({ type: "UPDATE_MENU", payload: updatedMenu });
+        setShowEditMenu(false);
+      } else {
+        const error = await res.json();
+        alert(error.error || "Ошибка при обновлении меню");
+      }
+    } catch (error) {
+      console.error("Failed to update menu:", error);
+      alert("Ошибка при обновлении меню");
+    } finally {
+      setUpdatingMenu(false);
+    }
+  };
+
+  const handleBulkPriceChange = async () => {
+    const changes = Object.entries(bulkPriceChanges)
+      .filter(([_, newPrice]) => newPrice.trim() !== "")
+      .map(([id, newPrice]) => ({ id, price: parseFloat(newPrice) }));
+
+    if (changes.length === 0) {
+      alert("Укажите новые цены для хотя бы одного блюда");
+      return;
+    }
+
+    setBulkPriceLoading(true);
+    try {
+      const res = await fetch("/api/dishes/bulk-price", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId || "",
+        },
+        body: JSON.stringify({ dishes: changes }),
+      });
+      if (res.ok) {
+        const updatedDishes = await res.json();
+        for (const dish of updatedDishes) {
+          dispatch({ type: "UPDATE_DISH", payload: dish });
+        }
+        setBulkPriceChanges({});
+        setViewMode("dishes");
+        alert("Цены обновлены!");
+      } else {
+        const error = await res.json();
+        alert(error.error || "Ошибка при изменении цен");
+      }
+    } catch (error) {
+      console.error("Failed to bulk update prices:", error);
+      alert("Ошибка при изменении цен");
+    } finally {
+      setBulkPriceLoading(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-background overflow-hidden">
       <header className="bg-white border-b border-gray-200 px-4 py-3 sm:px-6 sm:py-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="min-w-0">
+          <div className="min-w-0 flex items-center gap-2">
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{menu.name}</h1>
+            {isOwner && (
+              <button
+                onClick={() => {
+                  setEditMenuName(menu.name);
+                  setEditMenuDesc(menu.description || "");
+                  setShowEditMenu(true);
+                }}
+                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                title="Редактировать название"
+              >
+                <svg className="w-4 h-4 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+            )}
             {menu.description && (
-              <p className="text-gray-500 text-sm mt-0.5 truncate">{menu.description}</p>
+              <p className="text-gray-500 text-sm mt-0.5 truncate hidden sm:block">{menu.description}</p>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            {isOwner && (
+              <>
+                <Button
+                  size="sm"
+                  variant={viewMode === "bulk-prices" ? "primary" : "secondary"}
+                  onClick={() => setViewMode("bulk-prices")}
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Изменить цены
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setCopyNewName(`${menu.name} (Copy)`);
+                    setShowCopyMenu(true);
+                  }}
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Копировать
+                </Button>
+              </>
+            )}
             <Button
               size="sm"
               variant={viewMode === "categories" ? "primary" : "secondary"}
@@ -278,6 +439,75 @@ export function MenuEditor() {
         )}
 
         {viewMode === "tags" && <TagsPanel />}
+
+        {viewMode === "bulk-prices" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Изменение цен
+              </h2>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setBulkPriceChanges({});
+                    setViewMode("dishes");
+                  }}
+                >
+                  Отмена
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleBulkPriceChange}
+                  disabled={bulkPriceLoading}
+                >
+                  {bulkPriceLoading ? "Сохранение..." : "Сохранить"}
+                </Button>
+              </div>
+            </div>
+
+            {menuDishes.length === 0 ? (
+              <div className="bg-white rounded-xl border border-dashed border-gray-300 p-6 sm:p-8 text-center">
+                <p className="text-gray-500">Нет блюд</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="grid grid-cols-12 gap-4 px-4 py-3 bg-gray-50 border-b border-gray-200 text-sm font-medium text-gray-500">
+                  <div className="col-span-5">Блюдо</div>
+                  <div className="col-span-3">Старая цена</div>
+                  <div className="col-span-4">Новая цена</div>
+                </div>
+                {menuDishes.map((dish) => (
+                  <div key={dish.id} className="grid grid-cols-12 gap-4 px-4 py-3 border-b border-gray-100 last:border-b-0 items-center">
+                    <div className="col-span-5">
+                      <div className="font-medium text-gray-900">{dish.name}</div>
+                      {dish.description && (
+                        <div className="text-sm text-gray-400 truncate">{dish.description}</div>
+                      )}
+                    </div>
+                    <div className="col-span-3 text-gray-500">
+                      {formatPrice(dish.price)}
+                    </div>
+                    <div className="col-span-4">
+                      <Input
+                        type="number"
+                        placeholder="Не менять"
+                        value={bulkPriceChanges[dish.id] || ""}
+                        onChange={(e) => setBulkPriceChanges((prev) => ({
+                          ...prev,
+                          [dish.id]: e.target.value,
+                        }))}
+                        min="0"
+                        step="0.01"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <Modal
@@ -447,6 +677,90 @@ export function MenuEditor() {
               </div>
             </div>
           )}
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showCopyMenu}
+        onClose={() => {
+          setShowCopyMenu(false);
+          setCopyTargetOrgId("");
+          setCopyNewName("");
+        }}
+        title="Копировать меню"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowCopyMenu(false)}>
+              Отмена
+            </Button>
+            <Button onClick={handleCopyMenu} disabled={!copyTargetOrgId || copying}>
+              {copying ? "Копирование..." : "Копировать"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            Копировать меню &quot;{menu?.name}&quot; в другое заведение
+          </p>
+          <Input
+            label="Новое название"
+            placeholder="Название меню"
+            value={copyNewName}
+            onChange={(e) => setCopyNewName(e.target.value)}
+          />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Заведение</label>
+            <select
+              value={copyTargetOrgId}
+              onChange={(e) => setCopyTargetOrgId(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">Выберите заведение</option>
+              {state.organizations
+                .filter((org) => {
+                  const uo = state.userOrganizations.find((uo) => uo.organization_id === org.id);
+                  return uo?.role === "owner";
+                })
+                .map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showEditMenu}
+        onClose={() => setShowEditMenu(false)}
+        title="Редактировать меню"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowEditMenu(false)}>
+              Отмена
+            </Button>
+            <Button onClick={handleUpdateMenu} disabled={!editMenuName.trim() || updatingMenu}>
+              {updatingMenu ? "Сохранение..." : "Сохранить"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Название"
+            placeholder="Название меню"
+            value={editMenuName}
+            onChange={(e) => setEditMenuName(e.target.value)}
+            autoFocus
+          />
+          <Input
+            label="Описание (опционально)"
+            placeholder="Описание меню"
+            value={editMenuDesc}
+            onChange={(e) => setEditMenuDesc(e.target.value)}
+          />
         </div>
       </Modal>
     </div>

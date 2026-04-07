@@ -625,6 +625,120 @@ export async function deleteMenu(id: string): Promise<boolean> {
   return true;
 }
 
+export async function copyMenu(
+  sourceMenuId: string,
+  targetOrgId: string,
+  newName?: string
+): Promise<AppMenu> {
+  const sourceMenu = await prisma.menu.findUnique({
+    where: { id: sourceMenuId },
+    include: {
+      categories: {
+        orderBy: { sortOrder: "asc" },
+      },
+      dishes: true,
+    },
+  });
+
+  if (!sourceMenu) {
+    throw new Error("Source menu not found");
+  }
+
+  const sourceTagIds = Array.from(new Set(sourceMenu.dishes.map((d) => d.tagId).filter(Boolean) as string[]));
+  const sourceTags = sourceTagIds.length > 0
+    ? await prisma.tag.findMany({ where: { id: { in: sourceTagIds as string[] } } })
+    : [];
+
+  const tagMapping: Record<string, string> = {};
+  for (const tag of sourceTags) {
+    const existingTag = await prisma.tag.findFirst({
+      where: { organizationId: targetOrgId, name: tag.name },
+    });
+    if (existingTag) {
+      tagMapping[tag.id] = existingTag.id;
+    } else {
+      const newTag = await prisma.tag.create({
+        data: {
+          name: tag.name,
+          emoji: tag.emoji,
+          organizationId: targetOrgId,
+        },
+      });
+      tagMapping[tag.id] = newTag.id;
+    }
+  }
+
+  const newMenu = await prisma.menu.create({
+    data: {
+      name: newName || `${sourceMenu.name} (Copy)`,
+      description: sourceMenu.description,
+      logo: sourceMenu.logo,
+      organizationId: targetOrgId,
+      telegramBotToken: sourceMenu.telegramBotToken,
+      telegramChatId: sourceMenu.telegramChatId,
+      soundEnabled: sourceMenu.soundEnabled,
+      showWaiterButton: sourceMenu.showWaiterButton,
+      createdAt: BigInt(Date.now()),
+    },
+  });
+
+  const categoryMapping: Record<string, string> = {};
+  for (const category of sourceMenu.categories) {
+    const newCategory = await prisma.category.create({
+      data: {
+        name: category.name,
+        description: category.description,
+        sortOrder: category.sortOrder,
+        menuId: newMenu.id,
+      },
+    });
+    categoryMapping[category.id] = newCategory.id;
+  }
+
+  const dishCategoryLinks: { dishId: string; categoryId: string }[] = [];
+  for (const dish of sourceMenu.dishes) {
+    const newDish = await prisma.dish.create({
+      data: {
+        name: dish.name,
+        description: dish.description,
+        price: dish.price,
+        image: dish.image,
+        weight: dish.weight,
+        calories: dish.calories,
+        allergens: dish.allergens,
+        tagId: dish.tagId ? tagMapping[dish.tagId] || null : null,
+        isAvailable: dish.isAvailable,
+        menuId: newMenu.id,
+      },
+    });
+
+    const dishCategories = await prisma.dishCategory.findMany({
+      where: { dishId: dish.id },
+    });
+
+    for (const dc of dishCategories) {
+      const newCategoryId = categoryMapping[dc.categoryId];
+      if (newCategoryId) {
+        dishCategoryLinks.push({
+          dishId: newDish.id,
+          categoryId: newCategoryId,
+        });
+      }
+    }
+  }
+
+  for (const link of dishCategoryLinks) {
+    await prisma.dishCategory.create({
+      data: {
+        dishId: link.dishId,
+        categoryId: link.categoryId,
+      },
+    });
+  }
+
+  return toMenu(newMenu);
+}
+
 export async function getCategories(menuId: string): Promise<AppCategory[]> {
   const categories = await prisma.category.findMany({
     where: { menuId },

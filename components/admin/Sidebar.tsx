@@ -26,13 +26,18 @@ export function Sidebar({
   onCloseSidebar,
   userName
 }: SidebarProps) {
-  const { state, dispatch } = useStore();
+  const { state, dispatch, refreshOrganizationData } = useStore();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
   const [showReviewQRModal, setShowReviewQRModal] = useState(false);
   const [showCreateOrganizationModal, setShowCreateOrganizationModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [menuToDelete, setMenuToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [menuToCopy, setMenuToCopy] = useState<{ id: string; name: string } | null>(null);
+  const [copyTargetOrgId, setCopyTargetOrgId] = useState("");
+  const [copyNewName, setCopyNewName] = useState("");
+  const [copying, setCopying] = useState(false);
   const [newOrganizationName, setNewOrganizationName] = useState("");
   const [newMenuName, setNewMenuName] = useState("");
   const [newMenuDesc, setNewMenuDesc] = useState("");
@@ -125,7 +130,7 @@ export function Sidebar({
     }
   };
 
-  const handleOrganizationChange = (organizationId: string) => {
+  const handleOrganizationChange = async (organizationId: string) => {
     const nextOrganization = state.organizations.find((organization) => organization.id === organizationId);
     if (!nextOrganization) {
       return;
@@ -135,6 +140,8 @@ export function Sidebar({
     dispatch({ type: "SET_ACTIVE_ORGANIZATION", payload: organizationId });
     dispatch({ type: "SET_ACTIVE_MENU", payload: null });
     onCloseSidebar?.();
+
+    await refreshOrganizationData(organizationId);
   };
 
   const handleDeleteMenu = async () => {
@@ -160,6 +167,42 @@ export function Sidebar({
   const confirmDelete = (menu: { id: string; name: string }) => {
     setMenuToDelete(menu);
     setShowDeleteModal(true);
+  };
+
+  const confirmCopy = (menu: { id: string; name: string }) => {
+    setMenuToCopy(menu);
+    setCopyNewName(`${menu.name} (Copy)`);
+    setShowCopyModal(true);
+  };
+
+  const handleCopyMenu = async () => {
+    if (!menuToCopy || !copyTargetOrgId) return;
+    setCopying(true);
+    try {
+      const res = await fetch("/api/menus/copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceMenuId: menuToCopy.id,
+          targetOrgId: copyTargetOrgId,
+          newName: copyNewName.trim() || undefined,
+        }),
+      });
+      if (res.ok) {
+        const newMenu = await res.json();
+        if (state.activeOrganizationId === copyTargetOrgId) {
+          dispatch({ type: "CREATE_MENU", payload: newMenu });
+        }
+        setShowCopyModal(false);
+        setMenuToCopy(null);
+        setCopyTargetOrgId("");
+        setCopyNewName("");
+      }
+    } catch (error) {
+      console.error("Failed to copy menu:", error);
+    } finally {
+      setCopying(false);
+    }
   };
 
   const selectMenu = (menuId: string) => {
@@ -272,17 +315,30 @@ export function Sidebar({
                   </div>
                 </button>
                 {userRole === "owner" && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      confirmDelete({ id: menu.id, name: menu.name });
-                    }}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 opacity-0 group-hover:opacity-100 hover:bg-red-100 rounded transition-all"
-                  >
-                    <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 opacity-0 group-hover:opacity-100">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        confirmCopy({ id: menu.id, name: menu.name });
+                      }}
+                      className="p-1 hover:bg-blue-100 rounded transition-all"
+                    >
+                      <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        confirmDelete({ id: menu.id, name: menu.name });
+                      }}
+                      className="p-1 hover:bg-red-100 rounded transition-all"
+                    >
+                      <svg className="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
@@ -497,6 +553,61 @@ export function Sidebar({
         <p className="text-gray-600">
           Меню &quot;{menuToDelete?.name}&quot; будет удалено навсегда. Все категории и блюда также будут удалены.
         </p>
+      </Modal>
+
+      <Modal
+        isOpen={showCopyModal}
+        onClose={() => {
+          setShowCopyModal(false);
+          setMenuToCopy(null);
+          setCopyTargetOrgId("");
+          setCopyNewName("");
+        }}
+        title="Копировать меню"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setShowCopyModal(false)}>
+              Отмена
+            </Button>
+            <Button onClick={handleCopyMenu} disabled={!copyTargetOrgId || copying}>
+              {copying ? "Копирование..." : "Копировать"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            Копировать меню &quot;{menuToCopy?.name}&quot; в другое заведение
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Новое название</label>
+            <Input
+              placeholder="Название меню"
+              value={copyNewName}
+              onChange={(e) => setCopyNewName(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Заведение</label>
+            <select
+              value={copyTargetOrgId}
+              onChange={(e) => setCopyTargetOrgId(e.target.value)}
+              className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">Выберите заведение</option>
+              {state.organizations
+                .filter((org) => {
+                  const uo = state.userOrganizations.find((uo) => uo.organization_id === org.id);
+                  return uo?.role === "owner";
+                })
+                .map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+        </div>
       </Modal>
 
       {activeMenu && (

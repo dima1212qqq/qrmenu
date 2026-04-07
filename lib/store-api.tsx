@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useReducer, useEffect, ReactNode, useCallback } from "react";
+import { createContext, useContext, useReducer, useEffect, ReactNode, useCallback, useRef } from "react";
 import { Menu, Category, Dish, DishCategory, User, Organization, Tag, AppState, UserOrganization } from "./types";
 
 const ACTIVE_ORG_STORAGE_KEY = "menu-qr-active-organization";
@@ -215,12 +215,14 @@ interface StoreContextType {
   dispatch: React.Dispatch<Action>;
   refreshData: () => Promise<void>;
   refreshUsers: () => Promise<void>;
+  refreshOrganizationData: (orgId: string) => Promise<void>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const hasInitializedActiveOrgStorage = useRef(false);
 
   const getHeaders = useCallback(() => {
     const headers: Record<string, string> = {};
@@ -258,13 +260,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         const savedActiveOrgId =
           typeof window !== "undefined" ? window.localStorage.getItem(ACTIVE_ORG_STORAGE_KEY) : null;
-        const preferredOrgId = state.activeOrganizationId || savedActiveOrgId;
-        const newActiveOrgId =
-          preferredOrgId && organizations.some((organization: Organization) => organization.id === preferredOrgId)
-            ? preferredOrgId
-            : organizations.length > 0
-              ? organizations[0].id
-              : null;
+        
+        let newActiveOrgId = savedActiveOrgId;
+        
+        if (!newActiveOrgId || !organizations.some((organization: Organization) => organization.id === newActiveOrgId)) {
+          newActiveOrgId = organizations.length > 0 ? organizations[0].id : null;
+        }
 
         dispatch({ type: "SET_ACTIVE_ORGANIZATION", payload: newActiveOrgId });
 
@@ -305,7 +306,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } finally {
       dispatch({ type: "SET_LOADING", payload: false });
     }
-  }, [state.activeOrganizationId]);
+  }, []);
 
   const refreshUsers = useCallback(async () => {
     if (!state.activeOrganizationId) {
@@ -337,15 +338,67 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // On the first render, wait until the initial org selection is restored
+    // before syncing localStorage, otherwise the saved value gets wiped.
+    if (!hasInitializedActiveOrgStorage.current) {
+      if (state.loading) {
+        return;
+      }
+
+      hasInitializedActiveOrgStorage.current = true;
+    }
+
     if (state.activeOrganizationId) {
       window.localStorage.setItem(ACTIVE_ORG_STORAGE_KEY, state.activeOrganizationId);
     } else {
       window.localStorage.removeItem(ACTIVE_ORG_STORAGE_KEY);
     }
-  }, [state.activeOrganizationId]);
+  }, [state.activeOrganizationId, state.loading]);
+
+  const refreshOrganizationData = useCallback(async (orgId: string) => {
+    try {
+      dispatch({ type: "SET_LOADING", payload: true });
+      dispatch({ type: "SET_MENUS", payload: [] });
+      dispatch({ type: "SET_DISHES", payload: [] });
+      dispatch({ type: "SET_CATEGORIES", payload: [] });
+      dispatch({ type: "SET_DISH_CATEGORIES", payload: [] });
+      dispatch({ type: "SET_TAGS", payload: [] });
+      dispatch({ type: "SET_USERS", payload: [] });
+      dispatch({ type: "SET_ACTIVE_MENU", payload: null });
+
+      const headers = { "x-organization-id": orgId };
+
+      const [menusRes, categoriesRes, dishesRes, dishCatsRes, tagsRes] = await Promise.all([
+        fetch(`/api/menus?orgId=${orgId}`, { headers }),
+        fetch(`/api/categories?orgId=${orgId}`, { headers }),
+        fetch(`/api/dishes?orgId=${orgId}`, { headers }),
+        fetch("/api/dish-categories", { headers }),
+        fetch("/api/tags", { headers }),
+      ]);
+
+      const menus = menusRes.ok ? await menusRes.json() : [];
+      const categories = categoriesRes.ok ? await categoriesRes.json() : [];
+      const dishes = dishesRes.ok ? await dishesRes.json() : [];
+      const dishCategories = dishCatsRes.ok ? await dishCatsRes.json() : [];
+      const tags = tagsRes.ok ? await tagsRes.json() : [];
+
+      dispatch({ type: "SET_CATEGORIES", payload: categories });
+      dispatch({ type: "SET_DISHES", payload: dishes });
+      dispatch({ type: "SET_DISH_CATEGORIES", payload: dishCategories });
+      dispatch({ type: "SET_TAGS", payload: tags });
+      dispatch({ type: "SET_MENUS", payload: menus });
+
+      const nextActiveMenuId = menus.length > 0 ? menus[0].id : null;
+      dispatch({ type: "SET_ACTIVE_MENU", payload: nextActiveMenuId });
+    } catch (error) {
+      console.error("Failed to fetch organization data:", error);
+    } finally {
+      dispatch({ type: "SET_LOADING", payload: false });
+    }
+  }, []);
 
   return (
-    <StoreContext.Provider value={{ state, dispatch, refreshData, refreshUsers }}>
+    <StoreContext.Provider value={{ state, dispatch, refreshData, refreshUsers, refreshOrganizationData }}>
       {children}
     </StoreContext.Provider>
   );

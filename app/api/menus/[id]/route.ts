@@ -84,6 +84,38 @@ export async function PUT(
   }
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const user = session.user as any;
+    const menu = await getMenu(params.id);
+
+    if (!menu) {
+      return NextResponse.json({ error: "Menu not found" }, { status: 404 });
+    }
+
+    const userOrg = await getUserOrganization(user.id, menu.organization_id);
+    if (!userOrg || userOrg.role !== "owner") {
+      return NextResponse.json({ error: "Only owners can update menus" }, { status: 403 });
+    }
+
+    const updates = await request.json();
+    const updatedMenu = await updateMenu(params.id, updates);
+
+    return NextResponse.json(updatedMenu);
+  } catch (error) {
+    console.error("Failed to update menu:", error);
+    return NextResponse.json({ error: "Failed to update menu" }, { status: 500 });
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }

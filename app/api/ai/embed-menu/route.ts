@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
         .filter(Boolean) as string[];
       const dishTags = dish.tag_id ? tags.find((t: Tag) => t.id === dish.tag_id) : null;
 
-      const text = buildDishText(dish.name, dish.description || null, dishTags ? [dishTags.name] : [], dishCats);
+      const text = buildDishText(dish.name, dish.description || null, dishTags ? [dishTags.name] : [], dishCats, (dish as any).ai_context || null);
 
       embeddings.push({
         id: dish.id,

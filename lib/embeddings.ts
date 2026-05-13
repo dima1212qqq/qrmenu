@@ -1,8 +1,4 @@
-import OpenAI from "openai";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+import { getEmbeddingProvider } from "@/lib/llm";
 
 export interface DishEmbedding {
   dishId: string;
@@ -15,19 +11,15 @@ export interface DishEmbedding {
 }
 
 export async function createEmbedding(text: string): Promise<number[]> {
-  const response = await openai.embeddings.create({
-    model: "text-embedding-3-small",
-    input: text,
-  });
-  return response.data[0].embedding;
+  const provider = getEmbeddingProvider();
+  const result = await provider.createEmbedding(text);
+  return result.embedding;
 }
 
 export async function createEmbeddings(texts: string[]): Promise<number[][]> {
-  const response = await openai.embeddings.create({
-    model: "text-embedding-3-small",
-    input: texts,
-  });
-  return response.data.map((item) => item.embedding);
+  const provider = getEmbeddingProvider();
+  const results = await provider.createEmbeddings(texts);
+  return results.map((r) => r.embedding);
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
@@ -47,15 +39,21 @@ export function buildDishText(
   name: string,
   description: string | null,
   tags: string[],
-  categoryNames: string[]
+  categoryNames: string[],
+  aiContext?: string | null
 ): string {
-  const parts = [
-    name,
-    description,
-    ...tags,
-    ...categoryNames,
-  ].filter(Boolean);
-  return parts.join(", ");
+  const parts: string[] = [name];
+  const mainText = aiContext || description;
+  if (mainText) {
+    parts.push(mainText);
+  }
+  if (categoryNames.length > 0) {
+    parts.push(`категория: ${categoryNames.join(", ")}`);
+  }
+  if (tags.length > 0) {
+    parts.push(`теги: ${tags.join(", ")}`);
+  }
+  return parts.join(". ");
 }
 
 export async function searchDishes(
@@ -64,7 +62,7 @@ export async function searchDishes(
   limit: number = 5
 ): Promise<DishEmbedding[]> {
   const queryEmbedding = await createEmbedding(query);
-  
+
   const dishTexts = dishes.map((d) => d.text);
   const dishEmbeddings = await createEmbeddings(dishTexts);
 
@@ -76,5 +74,3 @@ export async function searchDishes(
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, limit).map((s) => s.dish);
 }
-
-export { openai };

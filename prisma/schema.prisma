@@ -22,6 +22,12 @@ enum OrderStatus {
   completed
 }
 
+enum OrderSource {
+  qr_menu
+  ai_chat
+  waiter
+}
+
 model Organization {
   id                 String @id @default(uuid())
   name               String
@@ -38,6 +44,8 @@ model Organization {
   tags               Tag[]
   reviews            Review[]
   orders             Order[]
+  pushSubscriptions  PushSubscription[]
+  aiChatLogs         AiChatLog[]
 
   @@map("organizations")
 }
@@ -56,6 +64,22 @@ model UserOrganization {
   @@map("user_organizations")
 }
 
+model PushSubscription {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  organizationId String   @map("organization_id")
+  fcmToken       String   @map("fcm_token")
+  deviceName     String?  @map("device_name")
+  createdAt      BigInt   @map("created_at")
+  updatedAt      BigInt   @map("updated_at")
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("push_subscriptions")
+}
+
 model User {
   id             String   @id @default(uuid())
   email          String   @unique
@@ -63,6 +87,7 @@ model User {
   name           String
   createdAt      BigInt   @map("created_at")
   userOrganizations UserOrganization[]
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
 }
@@ -113,6 +138,8 @@ model Dish {
   allergens   String?
   tagId       String?  @map("tag_id")
   isAvailable Boolean @default(true) @map("is_available")
+  aiContext   String?  @map("ai_context")
+  aiDetailedContext String? @map("ai_detailed_context")
   menu        Menu @relation(fields: [menuId], references: [id], onDelete: Cascade)
   categories  DishCategory[]
   tag         Tag?   @relation(fields: [tagId], references: [id], onDelete: SetNull)
@@ -151,6 +178,7 @@ model WaiterCall {
   tableNumber String?          @map("table_number")
   createdAt   BigInt           @map("created_at")
   status      WaiterCallStatus
+  notifiedAt  BigInt?          @map("notified_at")
   menu        Menu             @relation(fields: [menuId], references: [id], onDelete: Cascade)
 
   @@index([menuId])
@@ -177,7 +205,10 @@ model Order {
   tableNumber    String?     @map("table_number")
   total          Float       @default(0)
   status         OrderStatus @default(pending)
+  source         OrderSource @default(qr_menu) @map("source")
+  aiSessionId    String?     @map("ai_session_id")
   createdAt      BigInt      @map("created_at")
+  notifiedAt     BigInt?     @map("notified_at")
   menu           Menu        @relation(fields: [menuId], references: [id], onDelete: Cascade)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   items          OrderItem[]
@@ -198,4 +229,23 @@ model OrderItem {
 
   @@index([orderId])
   @@map("order_items")
+}
+
+model AiChatLog {
+  id                  String   @id @default(uuid())
+  organizationId      String   @map("organization_id")
+  sessionId           String?  @map("session_id")
+  userMessage          String   @map("user_message")
+  aiResponsText       String?  @map("ai_response_text")
+  recommendedDishIds   String?  @map("recommended_dish_ids")
+  addedToCartDishIds   String?  @map("added_to_cart_dish_ids")
+  searchResultsCount   Int?     @map("search_results_count")
+  responseTimeMs      Int?     @map("response_time_ms")
+  createdAt           BigInt   @map("created_at")
+
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([createdAt])
+  @@map("ai_chat_logs")
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { createDishCategory, deleteDish, deleteDishCategories, getDish, getMenu, getUserOrganization, updateDish } from "@/lib/db";
+import { createDishCategory, deleteDish, deleteDishCategories, getDish, getMenu, getUserOrganization, updateDish, getCategories, getTags, getDishCategoriesForMenu } from "@/lib/db";
+import { generateDishContext, generateDetailedDishContext } from "@/lib/ai-dish-context";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +76,78 @@ export async function PUT(
       for (const categoryId of categoryIds) {
         await createDishCategory({ dish_id: params.id, category_id: categoryId });
       }
+    }
+
+    // Regenerate AI context if content-relevant fields changed
+    const contentChanged =
+      name !== undefined ||
+      description !== undefined ||
+      tag_id !== undefined ||
+      categoryIds !== undefined ||
+      allergens !== undefined ||
+      calories !== undefined ||
+      weight !== undefined;
+
+    if (contentChanged && updatedDish) {
+      (async () => {
+        try {
+          const [categories, dishCategories, tags] = await Promise.all([
+            getCategories(dish.menu_id),
+            getDishCategoriesForMenu(dish.menu_id),
+            getTags(menu.organization_id),
+          ]);
+
+          const finalTagId = tag_id !== undefined ? tag_id : dish.tag_id;
+          const finalCats = categoryIds !== undefined ? categoryIds : [];
+
+          const dishCats = dishCategories
+            .filter((dc) => dc.dish_id === params.id)
+            .map((dc) => categories.find((c) => c.id === dc.category_id)?.name)
+            .filter(Boolean) as string[];
+
+          // If categoryIds were just updated, use them directly since getDishCategoriesForMenu may not reflect yet
+          const categoryNames =
+            categoryIds !== undefined
+              ? (finalCats
+                  .map((cid: string) => categories.find((c) => c.id === cid)?.name)
+                  .filter(Boolean) as string[])
+              : dishCats;
+
+          const dishTag = finalTagId ? tags.find((t) => t.id === finalTagId) : null;
+
+          const [aiContext, aiDetailedContext] = await Promise.all([
+            generateDishContext({
+              name: updatedDish.name,
+              description: updatedDish.description,
+              price: updatedDish.price,
+              weight: updatedDish.weight,
+              calories: updatedDish.calories,
+              allergens: updatedDish.allergens,
+              categoryNames,
+              tagName: dishTag?.name || null,
+            }),
+            generateDetailedDishContext({
+              name: updatedDish.name,
+              description: updatedDish.description,
+              price: updatedDish.price,
+              weight: updatedDish.weight,
+              calories: updatedDish.calories,
+              allergens: updatedDish.allergens,
+              categoryNames,
+              tagName: dishTag?.name || null,
+            })
+          ]);
+
+          if (aiContext || aiDetailedContext) {
+            await updateDish(params.id, {
+              ...(aiContext ? { ai_context: aiContext } : {}),
+              ...(aiDetailedContext ? { ai_detailed_context: aiDetailedContext } : {})
+            });
+          }
+        } catch (err) {
+          console.error("[Dishes API] Failed to regenerate AI context:", err);
+        }
+      })();
     }
 
     return NextResponse.json(updatedDish);

@@ -35,6 +35,8 @@ export interface Dish {
   allergens?: string | null;
   tag_id?: string | null;
   is_available?: boolean;
+  ai_context?: string | null;
+  ai_detailed_context?: string | null;
 }
 
 export interface Tag {

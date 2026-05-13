@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getMenu } from "@/lib/db";
+import { getMenu, getOrganizationSettings, getOrganizationBySlug, sendTelegramNotification } from "@/lib/db";
 import { prisma } from "@/lib/prisma";
 
 interface OrderItem {
@@ -13,12 +13,14 @@ interface OrderRequest {
   menuId: string;
   tableNumber?: string | null;
   items: OrderItem[];
+  sessionId?: string;
+  orgSlug?: string; // Validate menu belongs to this org
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: OrderRequest = await request.json();
-    const { menuId, tableNumber, items } = body;
+    const { menuId, tableNumber, items, sessionId, orgSlug } = body;
 
     if (!menuId || !items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
@@ -29,6 +31,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Menu not found" }, { status: 404 });
     }
 
+    // Validate orgSlug if provided — verify menu belongs to that organization
+    if (orgSlug) {
+      const org = await getOrganizationBySlug(orgSlug);
+      if (!org || org.id !== menu.organization_id) {
+        return NextResponse.json({ error: "Organization mismatch" }, { status: 403 });
+      }
+    }
+
+    const settings = await getOrganizationSettings(menu.organization_id);
     const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
     const order = await prisma.order.create({
@@ -38,6 +49,8 @@ export async function POST(request: NextRequest) {
         tableNumber: tableNumber || null,
         total,
         status: "pending",
+        source: "ai_chat",
+        aiSessionId: sessionId || null,
         createdAt: BigInt(Date.now()),
         items: {
           create: items.map((item) => ({
@@ -52,6 +65,20 @@ export async function POST(request: NextRequest) {
         items: true,
       },
     });
+
+    // Send Telegram notification (same as regular orders)
+    const itemsList = items.map((item) => `• ${item.name} x${item.quantity} = ${item.price * item.quantity}₽`).join("\n");
+    const telegramMessage = `🛒 Новый заказ (AI чат)!
+
+${itemsList}
+
+💰 Итого: ${total}₽
+${tableNumber ? `📍 Стол: ${tableNumber}` : ""}
+`;
+
+    if (settings.telegramBotToken && settings.telegramChatId) {
+      await sendTelegramNotification(telegramMessage, settings.telegramBotToken, settings.telegramChatId);
+    }
 
     return NextResponse.json({
       orderId: order.id,

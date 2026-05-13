@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (pathname.startsWith("/api/auth") || pathname.startsWith("/api/public") || pathname === "/login" || pathname === "/register" || pathname.startsWith("/menu")) {
+  if (pathname.startsWith("/api/auth") || pathname.startsWith("/api/public") || pathname.startsWith("/api/ai") || pathname === "/login" || pathname === "/register" || pathname.startsWith("/menu") || pathname.startsWith("/ai")) {
     return NextResponse.next();
   }
 

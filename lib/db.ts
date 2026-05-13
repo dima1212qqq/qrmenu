@@ -136,6 +136,8 @@ interface DishCreateInput {
   calories?: number | null;
   allergens?: string | null;
   tag_id?: string | null;
+  ai_context?: string | null;
+  ai_detailed_context?: string | null;
 }
 
 interface WaiterCallCreateInput {
@@ -181,6 +183,8 @@ type DishUpdateInput = Partial<{
   allergens: string | null;
   tag_id: string | null;
   is_available: boolean;
+  ai_context: string | null;
+  ai_detailed_context: string | null;
 }>;
 
 type WaiterCallUpdateInput = Partial<{
@@ -295,6 +299,8 @@ function toDish(record: PrismaDish): AppDish {
     allergens: record.allergens,
     tag_id: record.tagId,
     is_available: record.isAvailable,
+    ai_context: (record as any).aiContext ?? null,
+    ai_detailed_context: (record as any).aiDetailedContext ?? null,
   };
 }
 
@@ -844,6 +850,8 @@ export async function createDish(input: DishCreateInput): Promise<AppDish> {
       allergens: input.allergens ?? null,
       tagId: input.tag_id ?? null,
       isAvailable: true,
+      aiContext: input.ai_context ?? null,
+      aiDetailedContext: input.ai_detailed_context ?? null,
     } as any,
   });
 
@@ -868,6 +876,8 @@ export async function updateDish(id: string, updates: DishUpdateInput): Promise<
       ...(updates.allergens !== undefined ? { allergens: updates.allergens } : {}),
       ...(updates.tag_id !== undefined ? { tagId: updates.tag_id } : {}),
       ...(updates.is_available !== undefined ? { isAvailable: updates.is_available } : {}),
+      ...(updates.ai_context !== undefined ? { aiContext: updates.ai_context } : {}),
+      ...(updates.ai_detailed_context !== undefined ? { aiDetailedContext: updates.ai_detailed_context } : {}),
     } as any,
   });
 
@@ -1037,6 +1047,28 @@ export async function getAllTags(): Promise<AppTag[]> {
 export async function getTag(id: string): Promise<AppTag | undefined> {
   const tag = await prisma.tag.findUnique({ where: { id } });
   return tag ? toTag(tag) : undefined;
+}
+
+export async function getDishOrderCounts(
+  dishIds: string[],
+  since: Date = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+): Promise<Map<string, number>> {
+  const rows = await prisma.orderItem.groupBy({
+    by: ["dishId"],
+    where: {
+      dishId: { in: dishIds.length > 0 ? dishIds : undefined },
+      order: { createdAt: { gte: BigInt(since.getTime()) } },
+    },
+    _sum: { quantity: true },
+  });
+
+  const map = new Map<string, number>();
+  for (const row of rows) {
+    if (row.dishId) {
+      map.set(row.dishId, row._sum.quantity || 0);
+    }
+  }
+  return map;
 }
 
 export async function getTagForOrganization(id: string, organizationId: string): Promise<AppTag | undefined> {

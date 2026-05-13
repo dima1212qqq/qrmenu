@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "./Button";
 import { useCart } from "./CartContext";
 
@@ -12,12 +12,32 @@ interface Dish {
   description?: string | null;
 }
 
+interface SuggestedAction {
+  label: string;
+  prompt: string;
+}
+
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   dishes?: Dish[];
+  suggestedActions?: SuggestedAction[];
+  streaming?: boolean;
 }
+
+interface QuickAction {
+  label: string;
+  emoji: string;
+  prompt: string;
+}
+
+const INITIAL_QUICK_ACTIONS: QuickAction[] = [
+  { label: "\u0427\u0442\u043E \u043F\u043E\u0441\u043E\u0432\u0435\u0442\u0443\u0435\u0448\u044C?", emoji: "\uD83C\uDF7D", prompt: "\u0427\u0442\u043E \u043F\u043E\u0441\u043E\u0432\u0435\u0442\u0443\u0435\u0448\u044C \u0438\u0437 \u043C\u0435\u043D\u044E?" },
+  { label: "\u041E\u0441\u0442\u0440\u043E\u0435", emoji: "\uD83C\uDF36", prompt: "\u0425\u043E\u0447\u0443 \u0447\u0442\u043E-\u043D\u0438\u0431\u0443\u0434\u044C \u043E\u0441\u0442\u0440\u043E\u0435" },
+  { label: "\u041B\u0451\u0433\u043A\u043E\u0435", emoji: "\uD83E\uDD57", prompt: "\u0425\u043E\u0447\u0443 \u0447\u0442\u043E-\u0442\u043E \u043B\u0451\u0433\u043A\u043E\u0435" },
+  { label: "\u0421\u044B\u0442\u043D\u043E\u0435", emoji: "\uD83C\uDF54", prompt: "\u0425\u043E\u0447\u0443 \u0441\u044B\u0442\u043D\u043E \u043F\u043E\u0435\u0441\u0442\u044C" },
+];
 
 interface AIChatWidgetProps {
   organizationSlug: string;
@@ -57,6 +77,18 @@ export function AIChatWidget({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const sessionId = useRef(`session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+  const PLACEHOLDER_TEXT = "\u041F\u043E\u0434\u0431\u0438\u0440\u0430\u044E...";
+
+  const track = (event: string, data?: Record<string, unknown>) => {
+    try {
+      fetch("/api/ai/analytics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event, ...data }),
+      }).catch(() => {});
+    } catch {}
+  };
 
   useEffect(() => {
     sessionStorage.setItem(storageKey, JSON.stringify(messages));
@@ -83,56 +115,147 @@ export function AIChatWidget({
     }
   }, []);
 
-  const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+  const sendMessage = useCallback(
+    async (text: string) => {
+      if (!text.trim() || isLoading) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: input.trim(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setIsLoading(true);
-
-    try {
-      const conversationHistory = messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-
-      const res = await fetch("/api/ai/chat-org", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orgSlug: organizationSlug,
-          messages: [...conversationHistory, { role: "user", content: userMessage.content }],
-        }),
-      });
-
-      if (!res.ok) throw new Error("Chat request failed");
-
-      const data = await res.json();
-
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: data.response,
-        dishes: data.relevantDishes || [],
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: "user",
+        content: text.trim(),
       };
+      setMessages((prev) => [...prev, userMessage]);
+      setInput("");
+      setIsLoading(true);
 
-      setMessages((prev) => [...prev, aiMessage]);
-    } catch (error) {
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "Произошла небольшая ошибка. Попробуйте ещё раз или выберите блюдо вручную из меню.",
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
+      const assistantMsgId = (Date.now() + 1).toString();
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: assistantMsgId,
+          role: "assistant",
+          content: "",
+          streaming: true,
+        },
+      ]);
+
+      try {
+        const conversationHistory = [
+          ...messages.map((m) => ({ role: m.role, content: m.content })),
+          { role: "user" as const, content: text.trim() },
+        ];
+
+        const recentRecommendations = messages
+          .filter((m) => m.role === "assistant" && m.dishes?.length)
+          .flatMap((m) => m.dishes || [])
+          .map((d) => ({ dishId: d.id, name: d.name }));
+
+        const res = await fetch("/api/ai/chat-org", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orgSlug: organizationSlug,
+            menuId,
+            messages: conversationHistory,
+            cart: cart.map((i) => ({
+              dishId: i.dishId,
+              name: i.name,
+              price: i.price,
+              quantity: i.quantity,
+            })),
+            recentRecommendations,
+            sessionId: sessionId.current,
+          }),
+        });
+
+        if (!res.ok) {
+          if (res.status === 429) {
+            throw new Error("Rate limit exceeded");
+          }
+          throw new Error("Chat request failed");
+        }
+
+        const reader = res.body?.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              try {
+                const chunk = JSON.parse(line);
+
+                if (chunk.type === "search_results") {
+                  // Phase 1: show search results immediately
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === assistantMsgId
+                        ? {
+                            ...m,
+                            content: PLACEHOLDER_TEXT,
+                            dishes: chunk.dishes || [],
+                            streaming: true,
+                          }
+                        : m
+                    )
+                  );
+                } else if (chunk.type === "answer") {
+                  // Phase 2: final LLM answer
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === assistantMsgId
+                        ? {
+                            ...m,
+                            content: chunk.text || PLACEHOLDER_TEXT,
+                            dishes: chunk.dishes || [],
+                            suggestedActions: chunk.suggestions || [],
+                            streaming: false,
+                          }
+                        : m
+                    )
+                  );
+                } else if (chunk.type === "done") {
+                  track("chat_response", {
+                    orgSlug: organizationSlug,
+                    dishesCount: chunk._meta?.searchResultsCount || 0,
+                    responseTimeMs: chunk._meta?.responseTimeMs,
+                  });
+                  setIsLoading(false);
+                }
+              } catch {
+                // ignore malformed lines
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("[AI Chat] Error:", error);
+        setMessages((prev) => prev.filter((m) => m.id !== assistantMsgId));
+        const errorMessage: Message = {
+          id: (Date.now() + 2).toString(),
+          role: "assistant",
+          content:
+            error instanceof Error && error.message === "Rate limit exceeded"
+              ? "Слишком много запросов. Подождите немного и попробуйте снова."
+              : "Произошла небольшая ошибка. Попробуйте ещё раз или выберите блюдо вручную из меню.",
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+        setIsLoading(false);
+      }
+    },
+    [messages, isLoading, organizationSlug, menuId, cart]
+  );
+
+  const handleSend = () => {
+    sendMessage(input);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -144,6 +267,14 @@ export function AIChatWidget({
 
   const addToCart = (dish: Dish) => {
     addItem({ dishId: dish.id, name: dish.name, price: dish.price });
+  };
+
+  const handleQuickAction = (action: QuickAction) => {
+    sendMessage(action.prompt);
+  };
+
+  const handleSuggestedAction = (action: SuggestedAction) => {
+    sendMessage(action.prompt);
   };
 
   const removeFromCart = (dishId: string) => {
@@ -322,7 +453,12 @@ export function AIChatWidget({
                       borderBottomLeftRadius: message.role === "assistant" ? "4px" : "16px",
                     }}
                   >
-                    <p className="whitespace-pre-wrap">{message.content}</p>
+                    <p className="whitespace-pre-wrap">
+                      {message.content}
+                      {message.streaming && message.content === PLACEHOLDER_TEXT && (
+                        <span className="inline-block w-1 h-4 ml-1 bg-gray-400/80 animate-pulse" />
+                      )}
+                    </p>
 
                     {message.dishes && message.dishes.length > 0 && (
                       <div className="mt-3 space-y-2">
@@ -340,6 +476,7 @@ export function AIChatWidget({
                             )}
                             <div className="flex-1 min-w-0">
                               <p className="font-medium text-gray-900 truncate">{dish.name}</p>
+                              {dish.description && <p className="text-xs text-gray-500 truncate">{dish.description}</p>}
                               <p className="text-sm text-primary font-semibold">
                                 {formatPrice(dish.price)} ₽
                               </p>
@@ -353,6 +490,20 @@ export function AIChatWidget({
                               </button>
                             )}
                           </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {message.suggestedActions && message.suggestedActions.length > 0 && !message.streaming && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {message.suggestedActions.map((action, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => handleSuggestedAction(action)}
+                            className="px-3 py-1.5 bg-white border border-gray-200 text-gray-600 text-sm rounded-full hover:bg-gray-50 hover:border-gray-300 transition-all"
+                          >
+                            {action.label}
+                          </button>
                         ))}
                       </div>
                     )}

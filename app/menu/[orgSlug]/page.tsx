@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, ReactNode } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { AIChatButton } from "@/components/ui/AIChatButton";
@@ -63,14 +63,12 @@ interface OrgMenuData {
   };
 }
 
-export default function OrgMenuPage() {
-  const params = useParams();
-  const searchParams = useSearchParams();
-  const orgSlug = params.orgSlug as string;
-  const tableNumber = searchParams.get("table");
-  const isSharedLink = searchParams.get("share") === "true";
-  const initialMenuId = searchParams.get("menu");
-
+function MenuContent({ orgSlug, tableNumber, isSharedLink, initialMenuId }: {
+  orgSlug: string;
+  tableNumber: string | null;
+  isSharedLink: boolean;
+  initialMenuId: string | null;
+}) {
   const [data, setData] = useState<OrgMenuData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -172,8 +170,8 @@ export default function OrgMenuPage() {
 
       if (!res.ok) throw new Error("Order submission failed");
 
-      const data = await res.json();
-      alert(`Заказ #${data.orderId} отправлен! Итого: ${formatPrice(data.total)} ₽`);
+      const orderData = await res.json();
+      alert(`Заказ #${orderData.orderId} отправлен! Итого: ${formatPrice(orderData.total)} ₽`);
       setShowCart(false);
     } catch (error) {
       alert("Не удалось отправить заказ. Попробуйте ещё раз.");
@@ -206,18 +204,17 @@ export default function OrgMenuPage() {
   }
 
   return (
-    <CartProvider orgSlug={orgSlug}>
-      <div className="min-h-screen bg-background">
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
-          <div className="max-w-3xl mx-auto px-4 py-4">
-            <div className="flex items-center justify-between mb-4">
-              <h1 className="text-xl font-bold text-gray-900 truncate">
-                {data.organization.name}
-              </h1>
-              {tableNumber && (
-                <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium">
-                  Стол {tableNumber}
-                </span>
+    <div className="min-h-screen bg-background">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
+        <div className="max-w-3xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-xl font-bold text-gray-900 truncate">
+              {data.organization.name}
+            </h1>
+            {tableNumber && (
+              <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium">
+                Стол {tableNumber}
+              </span>
             )}
           </div>
 
@@ -551,6 +548,25 @@ export default function OrgMenuPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function OrgMenuPage() {
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const orgSlug = params.orgSlug as string;
+  const tableNumber = searchParams.get("table");
+  const isSharedLink = searchParams.get("share") === "true";
+  const initialMenuId = searchParams.get("menu");
+
+  return (
+    <CartProvider orgSlug={orgSlug}>
+      <MenuContent
+        orgSlug={orgSlug}
+        tableNumber={tableNumber}
+        isSharedLink={isSharedLink}
+        initialMenuId={initialMenuId}
+      />
     </CartProvider>
   );
 }

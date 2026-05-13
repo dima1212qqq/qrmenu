@@ -7,7 +7,12 @@ import {
   getDishesForOrganization,
   getMenu,
   getUserOrganization,
+  getCategories,
+  getTags,
+  getDishCategoriesForMenu,
+  updateDish,
 } from "@/lib/db";
+import { generateDishContext, generateDetailedDishContext } from "@/lib/ai-dish-context";
 import { v4 as uuidv4 } from "uuid";
 
 export const dynamic = "force-dynamic";
@@ -99,6 +104,55 @@ export async function POST(request: NextRequest) {
         await createDishCategory({ dish_id: dishId, category_id: categoryId });
       }
     }
+
+    // Generate AI context asynchronously — don't block the response
+    (async () => {
+      try {
+        const [categories, dishCategories, tags] = await Promise.all([
+          getCategories(menuId),
+          getDishCategoriesForMenu(menuId),
+          getTags(menu.organization_id),
+        ]);
+
+        const dishCats = dishCategories
+          .filter((dc) => dc.dish_id === dishId)
+          .map((dc) => categories.find((c) => c.id === dc.category_id)?.name)
+          .filter(Boolean) as string[];
+        const dishTag = tag_id ? tags.find((t) => t.id === tag_id) : null;
+
+        const [aiContext, aiDetailedContext] = await Promise.all([
+          generateDishContext({
+            name: dish.name,
+            description: dish.description,
+            price: dish.price,
+            weight: dish.weight,
+            calories: dish.calories,
+            allergens: dish.allergens,
+            categoryNames: dishCats,
+            tagName: dishTag?.name || null,
+          }),
+          generateDetailedDishContext({
+            name: dish.name,
+            description: dish.description,
+            price: dish.price,
+            weight: dish.weight,
+            calories: dish.calories,
+            allergens: dish.allergens,
+            categoryNames: dishCats,
+            tagName: dishTag?.name || null,
+          })
+        ]);
+
+        if (aiContext || aiDetailedContext) {
+          await updateDish(dishId, { 
+            ...(aiContext ? { ai_context: aiContext } : {}),
+            ...(aiDetailedContext ? { ai_detailed_context: aiDetailedContext } : {})
+          });
+        }
+      } catch (err) {
+        console.error("[Dishes API] Failed to generate AI context:", err);
+      }
+    })();
 
     return NextResponse.json(dish, { status: 201 });
   } catch (error) {

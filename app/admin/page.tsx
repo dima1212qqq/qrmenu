@@ -8,6 +8,7 @@ import { MenuEditor } from "@/components/admin/MenuEditor";
 import { WaiterCalls } from "@/components/admin/WaiterCalls";
 import { SettingsPanel } from "@/components/admin/SettingsPanel";
 import { UsersPanel } from "@/components/admin/UsersPanel";
+import { AnalyticsPanel } from "@/components/admin/AnalyticsPanel";
 
 function AdminLayoutContent() {
   const { data: session } = useSession();
@@ -16,6 +17,7 @@ function AdminLayoutContent() {
   const [showWaiterCalls, setShowWaiterCalls] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showUsers, setShowUsers] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -53,10 +55,11 @@ function AdminLayoutContent() {
 
   return (
     <div className="h-screen flex bg-background">
-      <Sidebar 
-        onShowWaiterCalls={() => setShowWaiterCalls(true)} 
+      <Sidebar
+        onShowWaiterCalls={() => setShowWaiterCalls(true)}
         onShowSettings={() => setShowSettings(true)}
         onShowUsers={() => setShowUsers(true)}
+        onShowAnalytics={() => setShowAnalytics(true)}
         isOpen={sidebarOpen}
         onCloseSidebar={() => setSidebarOpen(false)}
         userName={user?.name || ""}
@@ -95,6 +98,10 @@ function AdminLayoutContent() {
 
       {showUsers && isOwner && (
         <UsersPanel isOpen={showUsers} onClose={() => setShowUsers(false)} />
+      )}
+
+      {showAnalytics && isOwner && (
+        <AnalyticsPanel onClose={() => setShowAnalytics(false)} />
       )}
     </div>
   );

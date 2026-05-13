@@ -1,20 +1,28 @@
 import { NextResponse } from "next/server";
-import { openai } from "@/lib/embeddings";
+import { getChatProvider } from "@/lib/llm";
 
 export async function GET() {
+  const provider = getChatProvider();
   const status = {
     status: "ok",
     timestamp: new Date().toISOString(),
     services: {
-      openai: "unknown",
+      llm: {
+        provider: provider.name,
+        status: "unknown" as string,
+      },
     },
   };
 
   try {
-    await openai.models.list();
-    status.services.openai = "ok";
+    // Lightweight health check — list available models if supported
+    await provider.chatCompletion({
+      messages: [{ role: "user", content: "ping" }],
+      max_tokens: 1,
+    });
+    status.services.llm.status = "ok";
   } catch {
-    status.services.openai = "error";
+    status.services.llm.status = "error";
   }
 
   return NextResponse.json(status);

@@ -44,6 +44,14 @@ export function MenuEditor() {
   const [showEditMenu, setShowEditMenu] = useState(false);
   const [editMenuName, setEditMenuName] = useState("");
   const [editMenuDesc, setEditMenuDesc] = useState("");
+  const [showGenerateContext, setShowGenerateContext] = useState(false);
+  const [generatingContext, setGeneratingContext] = useState(false);
+  const [contextResult, setContextResult] = useState<{
+    processed: number;
+    succeeded: number;
+    failed: number;
+    errors: string[];
+  } | null>(null);
   const [updatingMenu, setUpdatingMenu] = useState(false);
   const [bulkPriceChanges, setBulkPriceChanges] = useState<Record<string, string>>({});
   const [bulkPriceLoading, setBulkPriceLoading] = useState(false);
@@ -66,6 +74,38 @@ export function MenuEditor() {
   }
 
   const sortedCategories = [...categories].sort((a, b) => a.sort_order - b.sort_order);
+
+  const handleGenerateContext = async () => {
+    if (!menu || !state.activeOrganizationId) return;
+    setGeneratingContext(true);
+    setContextResult(null);
+    try {
+      const res = await fetch("/api/ai/generate-dish-contexts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-organization-id": state.activeOrganizationId,
+        },
+        body: JSON.stringify({
+          menuId: menu.id,
+          orgId: state.activeOrganizationId,
+          limit: 50,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setContextResult(data.result);
+      } else {
+        const error = await res.json();
+        alert(error.error || "Ошибка при генерации AI контекста");
+      }
+    } catch (error) {
+      console.error("Failed to generate dish contexts:", error);
+      alert("Ошибка при генерации AI контекста");
+    } finally {
+      setGeneratingContext(false);
+    }
+  };
 
   const handleAddCategory = async () => {
     if (!newCatName.trim() || !state.activeOrganizationId) return;
@@ -313,6 +353,20 @@ export function MenuEditor() {
           <div className="flex gap-2 flex-wrap">
             {isOwner && (
               <>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setShowGenerateContext(true);
+                    handleGenerateContext();
+                  }}
+                  disabled={generatingContext}
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  {generatingContext ? "Генерация..." : "AI Контекст"}
+                </Button>
                 <Button
                   size="sm"
                   variant={viewMode === "bulk-prices" ? "primary" : "secondary"}
@@ -761,6 +815,60 @@ export function MenuEditor() {
             value={editMenuDesc}
             onChange={(e) => setEditMenuDesc(e.target.value)}
           />
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showGenerateContext}
+        onClose={() => {
+          setShowGenerateContext(false);
+          setContextResult(null);
+        }}
+        title="Генерация AI контекста"
+        footer={
+          <Button variant="secondary" onClick={() => { setShowGenerateContext(false); setContextResult(null); }}>
+            Закрыть
+          </Button>
+        }
+      >
+        <div className="space-y-4">
+          {generatingContext && (
+            <div className="flex items-center gap-3 text-gray-600">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
+              <span>Генерирую контекст для блюд без описания...</span>
+            </div>
+          )}
+          {contextResult && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-gray-50 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-gray-900">{contextResult.processed}</div>
+                  <div className="text-xs text-gray-500">Обработано</div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-green-700">{contextResult.succeeded}</div>
+                  <div className="text-xs text-green-600">Успешно</div>
+                </div>
+                <div className="bg-red-50 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-red-700">{contextResult.failed}</div>
+                  <div className="text-xs text-red-600">Ошибок</div>
+                </div>
+              </div>
+              {contextResult.errors.length > 0 && (
+                <div className="bg-red-50 rounded-lg p-3">
+                  <div className="text-sm font-medium text-red-800 mb-1">Ошибки:</div>
+                  <ul className="text-sm text-red-700 space-y-1 max-h-40 overflow-y-auto">
+                    {contextResult.errors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+          {!generatingContext && !contextResult && (
+            <p className="text-gray-500">Нажмите кнопку, чтобы начать генерацию AI контекста для блюд без описания.</p>
+          )}
         </div>
       </Modal>
     </div>
